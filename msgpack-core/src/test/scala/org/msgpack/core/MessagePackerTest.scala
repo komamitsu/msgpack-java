@@ -16,6 +16,7 @@
 package org.msgpack.core
 
 import java.io.{ByteArrayOutputStream, File, FileInputStream, FileOutputStream}
+import java.util
 
 import org.msgpack.core.MessagePack.{UnpackerConfig, PackerConfig}
 import org.msgpack.core.buffer.{ChannelBufferOutput, OutputStreamBufferOutput}
@@ -252,6 +253,30 @@ class MessagePackerTest extends MessagePackSpec {
         }
       }
       t("file-output-stream").averageWithoutMinMax shouldBe < (t("byte-array-output-stream").averageWithoutMinMax * 5)
+    }
+
+    "pack random objects over buffers" in {
+      for (_ <- 0 until 40) {
+        val count = 8000
+        val random = new Random
+        val objects = (0 until count).map { _ =>
+          val r = random.nextInt(3) // 0:string, 1:multi-byte string, 2: long string
+          r match {
+            case 0 => "a" * random.nextInt(64)
+            case 1 => "\u3042" * random.nextInt(32)
+            case 2 => "a" * (random.nextInt(32) + 1024)
+          }
+        }
+
+        val out = new ByteArrayOutputStream
+        val packer = MessagePack.newDefaultPacker(out)
+        objects.foreach(packer.packString(_))
+        packer.close
+
+        val unpacker = MessagePack.newDefaultUnpacker(out.toByteArray)
+        objects.foreach(unpacker.unpackString shouldBe _)
+        unpacker.close
+      }
     }
   }
 
