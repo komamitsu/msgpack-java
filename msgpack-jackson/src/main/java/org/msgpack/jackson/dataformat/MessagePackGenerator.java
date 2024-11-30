@@ -20,11 +20,12 @@ import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.ObjectCodec;
 import com.fasterxml.jackson.core.SerializableString;
 import com.fasterxml.jackson.core.base.GeneratorBase;
+import com.fasterxml.jackson.core.io.IOContext;
 import com.fasterxml.jackson.core.io.SerializedString;
 import com.fasterxml.jackson.core.json.JsonWriteContext;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessagePacker;
-import org.msgpack.core.buffer.OutputStreamBufferOutput;
+import org.msgpack.core.annotations.Nullable;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -33,20 +34,29 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 
 public class MessagePackGenerator
         extends GeneratorBase
 {
     private static final Charset DEFAULT_CHARSET = Charset.forName("UTF-8");
     private final MessagePacker messagePacker;
+    /*
     private static ThreadLocal<OutputStreamBufferOutput> messageBufferOutputHolder = new ThreadLocal<OutputStreamBufferOutput>();
+     */
     private final OutputStream output;
     private final MessagePack.PackerConfig packerConfig;
-    private LinkedList<StackItem> stack;
+    private Deque<StackItem> stack;
     private StackItem rootStackItem;
+    private final IOContext ioContext;
+
+    private static class AsciiCharString {
+        public final byte[] bytes;
+
+        public AsciiCharString(byte[] bytes) {
+            this.bytes = bytes;
+        }
+    }
 
     private abstract static class StackItem
     {
@@ -101,6 +111,7 @@ public class MessagePackGenerator
     }
 
     public MessagePackGenerator(
+            IOContext ioContext,
             int features,
             ObjectCodec codec,
             OutputStream out,
@@ -108,14 +119,16 @@ public class MessagePackGenerator
             boolean reuseResourceInGenerator)
             throws IOException
     {
-        super(features, codec);
+        super(features, codec, ioContext);
+        this.ioContext = ioContext;
         this.output = out;
 
+        /*
         OutputStreamBufferOutput messageBufferOutput;
         if (reuseResourceInGenerator) {
             messageBufferOutput = messageBufferOutputHolder.get();
             if (messageBufferOutput == null) {
-                messageBufferOutput = new OutputStreamBufferOutput(out);
+                messageBufferOutput = new OutputStreamBufferOutput(out, 1024);
                 messageBufferOutputHolder.set(messageBufferOutput);
             }
             else {
@@ -123,13 +136,16 @@ public class MessagePackGenerator
             }
         }
         else {
-            messageBufferOutput = new OutputStreamBufferOutput(out);
+            messageBufferOutput = new OutputStreamBufferOutput(out, 1024);
         }
+
         this.messagePacker = packerConfig.newPacker(messageBufferOutput);
+         */
+        this.messagePacker = packerConfig.newPacker(new JacksonBufferOutput(out, ioContext));
 
         this.packerConfig = packerConfig;
 
-        this.stack = new LinkedList<StackItem>();
+        this.stack = new ArrayDeque<>();
     }
 
     @Override
@@ -148,7 +164,7 @@ public class MessagePackGenerator
             _reportError("Current context not an array but " + _writeContext.getTypeDesc());
         }
 
-        getStackTopForArray();
+//        getStackTopForArray();
 
         _writeContext = _writeContext.getParent();
 
@@ -171,6 +187,7 @@ public class MessagePackGenerator
             _reportError("Current context not an object but " + _writeContext.getTypeDesc());
         }
 
+        /*
         StackItemForObject stackTop = getStackTopForObject();
 
         if (stackTop.getKeys().size() != stackTop.getValues().size()) {
@@ -179,6 +196,8 @@ public class MessagePackGenerator
                             "objectKeys.size() and objectValues.size() is not same: depth=%d, key=%d, value=%d",
                             stack.size(), stackTop.getKeys().size(), stackTop.getValues().size()));
         }
+         */
+
         _writeContext = _writeContext.getParent();
 
         popStackAndStoreTheItemAsValue();
@@ -207,6 +226,11 @@ public class MessagePackGenerator
                 messagePacker.packBinaryHeader(len);
                 messagePacker.addPayload(data);
             }
+        }
+        else if (v instanceof AsciiCharString) {
+            byte[] bytes = ((AsciiCharString) v).bytes;
+            messagePacker.packRawStringHeader(bytes.length);
+            messagePacker.writePayload(bytes);
         }
         else if (v instanceof String) {
             messagePacker.packString((String) v);
@@ -244,7 +268,7 @@ public class MessagePackGenerator
         else {
             messagePacker.flush();
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            MessagePackGenerator messagePackGenerator = new MessagePackGenerator(getFeatureMask(), getCodec(), outputStream, packerConfig, false);
+            MessagePackGenerator messagePackGenerator = new MessagePackGenerator(ioContext, getFeatureMask(), getCodec(), outputStream, packerConfig, false);
             getCodec().writeValue(messagePackGenerator, v);
             output.write(outputStream.toByteArray());
         }
@@ -287,8 +311,9 @@ public class MessagePackGenerator
         MessagePacker messagePacker = getMessagePacker();
         messagePacker.packMapHeader(keys.size());
 
-        for (int i = 0; i < keys.size(); i++) {
-            pack(keys.get(i));
+        int i = 0;
+        for (Object key : keys) {
+            pack(key);
             pack(values.get(i));
         }
     }
@@ -301,16 +326,33 @@ public class MessagePackGenerator
         MessagePacker messagePacker = getMessagePacker();
         messagePacker.packArrayHeader(values.size());
 
-        for (int i = 0; i < values.size(); i++) {
-            Object v = values.get(i);
-            pack(v);
+        for (Object value : values) {
+            pack(value);
         }
+    }
+
+    @Nullable
+    private byte[] getBytesIfAscii(char[] chars) throws IOException {
+        byte[] bytes = new byte[chars.length];
+        int i = 0;
+        for (char c : chars) {
+            if (c > 0x7F) {
+                return null;
+            }
+            bytes[i++] = (byte) c;
+        }
+        return bytes;
     }
 
     @Override
     public void writeFieldName(String name)
             throws IOException, JsonGenerationException
     {
+        byte[] bytes = getBytesIfAscii(name.toCharArray());
+        if (bytes != null) {
+            addKeyToStackTop(new AsciiCharString(bytes));
+            return;
+        }
         addKeyToStackTop(name);
     }
 
@@ -322,7 +364,12 @@ public class MessagePackGenerator
             addKeyToStackTop(((MessagePackSerializedString) name).getRawValue());
         }
         else if (name instanceof SerializedString) {
-            addKeyToStackTop(name.getValue());
+            byte[] bytes = getBytesIfAscii(name.getValue().toCharArray());
+            if (bytes != null) {
+                addKeyToStackTop(new AsciiCharString(bytes));
+                return;
+            }
+            addKeyToStackTop(name);
         }
         else {
             System.out.println(name.getClass());
@@ -334,6 +381,11 @@ public class MessagePackGenerator
     public void writeString(String text)
             throws IOException, JsonGenerationException
     {
+        byte[] bytes = getBytesIfAscii(text.toCharArray());
+        if (bytes != null) {
+            addValueToStackTop(new AsciiCharString(bytes));
+            return;
+        }
         addValueToStackTop(text);
     }
 
@@ -341,6 +393,7 @@ public class MessagePackGenerator
     public void writeString(char[] text, int offset, int len)
             throws IOException, JsonGenerationException
     {
+        // TODO
         addValueToStackTop(new String(text, offset, len));
     }
 
@@ -348,6 +401,7 @@ public class MessagePackGenerator
     public void writeRawUTF8String(byte[] text, int offset, int length)
             throws IOException, JsonGenerationException
     {
+        // TODO
         addValueToStackTop(new String(text, offset, length, DEFAULT_CHARSET));
     }
 
@@ -355,6 +409,7 @@ public class MessagePackGenerator
     public void writeUTF8String(byte[] text, int offset, int length)
             throws IOException, JsonGenerationException
     {
+        // TODO
         addValueToStackTop(new String(text, offset, length, DEFAULT_CHARSET));
     }
 
@@ -362,6 +417,7 @@ public class MessagePackGenerator
     public void writeRaw(String text)
             throws IOException, JsonGenerationException
     {
+        // TODO
         addValueToStackTop(text);
     }
 
@@ -369,6 +425,7 @@ public class MessagePackGenerator
     public void writeRaw(String text, int offset, int len)
             throws IOException, JsonGenerationException
     {
+        // TODO
         addValueToStackTop(text.substring(0, len));
     }
 
@@ -376,6 +433,7 @@ public class MessagePackGenerator
     public void writeRaw(char[] text, int offset, int len)
             throws IOException, JsonGenerationException
     {
+        // TODO
         addValueToStackTop(new String(text, offset, len));
     }
 
@@ -383,6 +441,7 @@ public class MessagePackGenerator
     public void writeRaw(char c)
             throws IOException, JsonGenerationException
     {
+        // TODO
         addValueToStackTop(String.valueOf(c));
     }
 
@@ -505,6 +564,7 @@ public class MessagePackGenerator
             flush();
         }
         finally {
+            super.close();
             if (isEnabled(Feature.AUTO_CLOSE_TARGET)) {
                 MessagePacker messagePacker = getMessagePacker();
                 messagePacker.close();
@@ -541,6 +601,7 @@ public class MessagePackGenerator
     @Override
     protected void _releaseBuffers()
     {
+        throw new UnsupportedOperationException();
     }
 
     @Override
