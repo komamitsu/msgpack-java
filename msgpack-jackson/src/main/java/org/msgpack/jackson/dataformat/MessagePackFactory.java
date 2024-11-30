@@ -85,7 +85,8 @@ public class MessagePackFactory
     public JsonGenerator createGenerator(OutputStream out, JsonEncoding enc)
             throws IOException
     {
-        return new MessagePackGenerator(_generatorFeatures, _objectCodec, out, packerConfig, reuseResourceInGenerator);
+        IOContext ctxt = _createContext(_createContentReference(out), false);
+        return new MessagePackGenerator(ctxt, _generatorFeatures, _objectCodec, out, packerConfig, isReuseResourceInGenerator());
     }
 
     @Override
@@ -177,5 +178,10 @@ public class MessagePackFactory
     public String getFormatName()
     {
         return "msgpack";
+    }
+
+    @Override
+    public boolean canHandleBinaryNatively() {
+        return true;
     }
 }
