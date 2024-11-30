@@ -19,7 +19,6 @@ import com.fasterxml.jackson.core.Base64Variant;
 import com.fasterxml.jackson.core.JsonLocation;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.JsonStreamContext;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.ObjectCodec;
@@ -28,7 +27,6 @@ import com.fasterxml.jackson.core.base.ParserMinimalBase;
 import com.fasterxml.jackson.core.io.IOContext;
 import com.fasterxml.jackson.core.io.JsonEOFException;
 import com.fasterxml.jackson.core.json.DupDetector;
-import com.fasterxml.jackson.core.json.JsonReadContext;
 import org.msgpack.core.ExtensionTypeHeader;
 import org.msgpack.core.MessageFormat;
 import org.msgpack.core.MessagePack;
@@ -42,22 +40,19 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.util.LinkedList;
 
 public class MessagePackParser
         extends ParserMinimalBase
 {
-    private static final ThreadLocal<Tuple<Object, MessageUnpacker>> messageUnpackerHolder =
-            new ThreadLocal<Tuple<Object, MessageUnpacker>>();
+    private static final ThreadLocal<Tuple<Object, MessageUnpacker>> messageUnpackerHolder = new ThreadLocal<>();
     private final MessageUnpacker messageUnpacker;
 
-    private static final BigInteger LONG_MIN = BigInteger.valueOf((long) Long.MIN_VALUE);
-    private static final BigInteger LONG_MAX = BigInteger.valueOf((long) Long.MAX_VALUE);
+    private static final BigInteger LONG_MIN = BigInteger.valueOf(Long.MIN_VALUE);
+    private static final BigInteger LONG_MAX = BigInteger.valueOf(Long.MAX_VALUE);
 
     private ObjectCodec codec;
-    private JsonReadContext parsingContext;
+    private MessagePackReadContext streamReadContext;
 
-    private final LinkedList<StackItem> stack = new LinkedList<StackItem>();
     private boolean isClosed;
     private long tokenPosition;
     private long currentPosition;
@@ -76,45 +71,7 @@ public class MessagePackParser
     private String stringValue;
     private BigInteger biValue;
     private MessagePackExtensionType extensionTypeValue;
-    private boolean reuseResourceInParser;
-
-    private abstract static class StackItem
-    {
-        private long numOfElements;
-
-        protected StackItem(long numOfElements)
-        {
-            this.numOfElements = numOfElements;
-        }
-
-        public void consume()
-        {
-            numOfElements--;
-        }
-
-        public boolean isEmpty()
-        {
-            return numOfElements == 0;
-        }
-    }
-
-    private static class StackItemForObject
-            extends StackItem
-    {
-        StackItemForObject(long numOfElements)
-        {
-            super(numOfElements);
-        }
-    }
-
-    private static class StackItemForArray
-            extends StackItem
-    {
-        StackItemForArray(long numOfElements)
-        {
-            super(numOfElements);
-        }
-    }
+    private final boolean reuseResourceInParser;
 
     public MessagePackParser(IOContext ctxt, int features, ObjectCodec objectCodec, InputStream in)
             throws IOException
@@ -164,7 +121,7 @@ public class MessagePackParser
         ioContext = ctxt;
         DupDetector dups = Feature.STRICT_DUPLICATE_DETECTION.enabledIn(features)
                 ? DupDetector.rootDetector(this) : null;
-        parsingContext = JsonReadContext.createRootContext(dups);
+        streamReadContext = MessagePackReadContext.createRootContext(dups);
         this.reuseResourceInParser = reuseResourceInParser;
         if (!reuseResourceInParser) {
             this.messageUnpacker = MessagePack.newDefaultUnpacker(input);
@@ -189,7 +146,7 @@ public class MessagePackParser
             }
             messageUnpacker = messageUnpackerTuple.second();
         }
-        messageUnpackerHolder.set(new Tuple<Object, MessageUnpacker>(src, messageUnpacker));
+        messageUnpackerHolder.set(new Tuple<>(src, messageUnpacker));
     }
 
     public void setExtensionTypeCustomDeserializers(ExtensionTypeCustomDeserializers extTypeCustomDesers)
@@ -222,14 +179,16 @@ public class MessagePackParser
         MessageUnpacker messageUnpacker = getMessageUnpacker();
         tokenPosition = messageUnpacker.getTotalReadBytes();
 
-        JsonToken nextToken = null;
-        if (parsingContext.inObject() || parsingContext.inArray()) {
-            if (stack.getFirst().isEmpty()) {
-                stack.pop();
-                _currToken = parsingContext.inObject() ? JsonToken.END_OBJECT : JsonToken.END_ARRAY;
-                parsingContext = parsingContext.getParent();
-
-                return _currToken;
+        if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
+            if (!streamReadContext.expectMoreValues()) {
+                streamReadContext = streamReadContext.getParent();
+                return _updateToken(JsonToken.END_OBJECT);
+            }
+        }
+        else if (streamReadContext.inArray()) {
+            if (!streamReadContext.expectMoreValues()) {
+                streamReadContext = streamReadContext.getParent();
+                return _updateToken(JsonToken.END_ARRAY);
             }
         }
 
@@ -240,9 +199,7 @@ public class MessagePackParser
         MessageFormat format = messageUnpacker.getNextFormat();
         ValueType valueType = messageUnpacker.getNextFormat().getValueType();
 
-        // We should push a new StackItem lazily after updating the current stack.
-        StackItem newStack = null;
-
+        JsonToken nextToken;
         switch (valueType) {
             case NIL:
                 messageUnpacker.unpackNil();
@@ -250,8 +207,8 @@ public class MessagePackParser
                 break;
             case BOOLEAN:
                 boolean b = messageUnpacker.unpackBoolean();
-                if (parsingContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
-                    parsingContext.setCurrentName(Boolean.toString(b));
+                if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
+                    streamReadContext.setCurrentName(Boolean.toString(b));
                     nextToken = JsonToken.FIELD_NAME;
                 }
                 else {
@@ -289,8 +246,8 @@ public class MessagePackParser
                         break;
                 }
 
-                if (parsingContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
-                    parsingContext.setCurrentName(String.valueOf(v));
+                if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
+                    streamReadContext.setCurrentName(String.valueOf(v));
                     nextToken = JsonToken.FIELD_NAME;
                 }
                 else {
@@ -300,8 +257,8 @@ public class MessagePackParser
             case FLOAT:
                 type = Type.DOUBLE;
                 doubleValue = messageUnpacker.unpackDouble();
-                if (parsingContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
-                    parsingContext.setCurrentName(String.valueOf(doubleValue));
+                if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
+                    streamReadContext.setCurrentName(String.valueOf(doubleValue));
                     nextToken = JsonToken.FIELD_NAME;
                 }
                 else {
@@ -311,8 +268,8 @@ public class MessagePackParser
             case STRING:
                 type = Type.STRING;
                 stringValue = messageUnpacker.unpackString();
-                if (parsingContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
-                    parsingContext.setCurrentName(stringValue);
+                if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
+                    streamReadContext.setCurrentName(stringValue);
                     nextToken = JsonToken.FIELD_NAME;
                 }
                 else {
@@ -323,8 +280,8 @@ public class MessagePackParser
                 type = Type.BYTES;
                 int len = messageUnpacker.unpackBinaryHeader();
                 bytesValue = messageUnpacker.readPayload(len);
-                if (parsingContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
-                    parsingContext.setCurrentName(new String(bytesValue, MessagePack.UTF8));
+                if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
+                    streamReadContext.setCurrentName(new String(bytesValue, MessagePack.UTF8));
                     nextToken = JsonToken.FIELD_NAME;
                 }
                 else {
@@ -332,17 +289,19 @@ public class MessagePackParser
                 }
                 break;
             case ARRAY:
-                newStack = new StackItemForArray(messageUnpacker.unpackArrayHeader());
+                nextToken = JsonToken.START_ARRAY;
+                streamReadContext = streamReadContext.createChildArrayContext(messageUnpacker.unpackArrayHeader());
                 break;
             case MAP:
-                newStack = new StackItemForObject(messageUnpacker.unpackMapHeader());
+                nextToken = JsonToken.START_OBJECT;
+                streamReadContext = streamReadContext.createChildObjectContext(messageUnpacker.unpackMapHeader());
                 break;
             case EXTENSION:
                 type = Type.EXT;
                 ExtensionTypeHeader header = messageUnpacker.unpackExtensionTypeHeader();
                 extensionTypeValue = new MessagePackExtensionType(header.getType(), messageUnpacker.readPayload(header.getLength()));
-                if (parsingContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
-                    parsingContext.setCurrentName(deserializedExtensionTypeValue().toString());
+                if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
+                    streamReadContext.setCurrentName(deserializedExtensionTypeValue().toString());
                     nextToken = JsonToken.FIELD_NAME;
                 }
                 else {
@@ -354,22 +313,7 @@ public class MessagePackParser
         }
         currentPosition = messageUnpacker.getTotalReadBytes();
 
-        if (parsingContext.inObject() && nextToken != JsonToken.FIELD_NAME || parsingContext.inArray()) {
-            stack.getFirst().consume();
-        }
-
-        if (newStack != null) {
-            stack.push(newStack);
-            if (newStack instanceof StackItemForArray) {
-                nextToken = JsonToken.START_ARRAY;
-                parsingContext = parsingContext.createChildArrayContext(-1, -1);
-            }
-            else if (newStack instanceof StackItemForObject) {
-                nextToken = JsonToken.START_OBJECT;
-                parsingContext = parsingContext.createChildObjectContext(-1, -1);
-            }
-        }
-        _currToken = nextToken;
+        _updateToken(nextToken);
 
         return nextToken;
     }
@@ -641,7 +585,7 @@ public class MessagePackParser
     @Override
     public JsonStreamContext getParsingContext()
     {
-        return parsingContext;
+        return streamReadContext;
     }
 
     @Override
@@ -659,29 +603,35 @@ public class MessagePackParser
     @Override
     public void overrideCurrentName(String name)
     {
-        try {
-            if (_currToken == JsonToken.START_OBJECT || _currToken == JsonToken.START_ARRAY) {
-                JsonReadContext parent = parsingContext.getParent();
-                parent.setCurrentName(name);
-            }
-            else {
-                parsingContext.setCurrentName(name);
-            }
+        // Simple, but need to look for START_OBJECT/ARRAY's "off-by-one" thing:
+        MessagePackReadContext ctxt = streamReadContext;
+        if (_currToken == JsonToken.START_OBJECT || _currToken == JsonToken.START_ARRAY) {
+            ctxt = ctxt.getParent();
         }
-        catch (JsonProcessingException e) {
+        // Unfortunate, but since we did not expose exceptions, need to wrap
+        try {
+            ctxt.setCurrentName(name);
+        }
+        catch (IOException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    @Override // since 2.17
+    public String currentName() throws IOException
+    {
+        if (_currToken == JsonToken.START_OBJECT || _currToken == JsonToken.START_ARRAY) {
+            MessagePackReadContext parent = streamReadContext.getParent();
+            return parent.getCurrentName();
+        }
+        return streamReadContext.getCurrentName();
     }
 
     @Override
     public String getCurrentName()
             throws IOException
     {
-        if (_currToken == JsonToken.START_OBJECT || _currToken == JsonToken.START_ARRAY) {
-            JsonReadContext parent = parsingContext.getParent();
-            return parent.getCurrentName();
-        }
-        return parsingContext.getCurrentName();
+        return currentName();
     }
 
     private MessageUnpacker getMessageUnpacker()

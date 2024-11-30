@@ -65,6 +65,7 @@ public class MessagePackDataformatTestBase
         normalPojo.b = new byte[] {0x01, 0x02, (byte) 0xFE, (byte) 0xFF};
         normalPojo.bi = BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE);
         normalPojo.suit = Suit.HEART;
+        normalPojo.sMultibyte = "text文字";
 
         nestedListPojo = new NestedListPojo();
         nestedListPojo.s = "a string";
@@ -148,6 +149,7 @@ public class MessagePackDataformatTestBase
         public byte[] b;
         public BigInteger bi;
         public Suit suit;
+        public String sMultibyte;
 
         public String getS()
         {

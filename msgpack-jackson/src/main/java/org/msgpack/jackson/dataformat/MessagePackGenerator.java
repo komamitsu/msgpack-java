@@ -16,7 +16,6 @@
 package org.msgpack.jackson.dataformat;
 
 import com.fasterxml.jackson.core.Base64Variant;
-import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.ObjectCodec;
 import com.fasterxml.jackson.core.SerializableString;
 import com.fasterxml.jackson.core.base.GeneratorBase;
@@ -24,80 +23,90 @@ import com.fasterxml.jackson.core.io.SerializedString;
 import com.fasterxml.jackson.core.json.JsonWriteContext;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessagePacker;
+import org.msgpack.core.annotations.Nullable;
+import org.msgpack.core.buffer.MessageBufferOutput;
 import org.msgpack.core.buffer.OutputStreamBufferOutput;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 
 public class MessagePackGenerator
         extends GeneratorBase
 {
-    private static final Charset DEFAULT_CHARSET = Charset.forName("UTF-8");
+    private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
     private final MessagePacker messagePacker;
-    private static ThreadLocal<OutputStreamBufferOutput> messageBufferOutputHolder = new ThreadLocal<OutputStreamBufferOutput>();
+    private static final ThreadLocal<OutputStreamBufferOutput> messageBufferOutputHolder = new ThreadLocal<>();
     private final OutputStream output;
     private final MessagePack.PackerConfig packerConfig;
-    private LinkedList<StackItem> stack;
-    private StackItem rootStackItem;
 
-    private abstract static class StackItem
-    {
-        protected List<Object> objectKeys = new ArrayList<Object>();
-        protected List<Object> objectValues = new ArrayList<Object>();
+    private int currentParentElementIndex = -1;
+    private final List<Element> elements;
+    private boolean isElementsClosed = false;
 
-        abstract void addKey(Object key);
-
-        void addValue(Object value)
-        {
-            objectValues.add(value);
+    private static final boolean STRING_VALUE_FIELD_IS_CHARS;
+    static {
+        boolean stringValueFieldIsChars = false;
+        try {
+            Field stringValueField = String.class.getDeclaredField("value");
+            stringValueFieldIsChars = stringValueField.getType() == char[].class;
         }
+        catch (NoSuchFieldException ignored) {
+        }
+        STRING_VALUE_FIELD_IS_CHARS = stringValueFieldIsChars;
+    }
 
-        abstract List<Object> getKeys();
+    private static class AsciiCharString
+    {
+        public final byte[] bytes;
 
-        List<Object> getValues()
+        public AsciiCharString(byte[] bytes)
         {
-            return objectValues;
+            this.bytes = bytes;
         }
     }
 
-    private static class StackItemForObject
-            extends StackItem
-    {
-        @Override
-        void addKey(Object key)
-        {
-            objectKeys.add(key);
-        }
+    private static final byte NON_CONTAINER = 0;
+    private static final byte CONTAINER_OBJECT = 1;
+    private static final byte CONTAINER_ARRAY = 2;
 
-        @Override
-        List<Object> getKeys()
+    private static final class Element
+    {
+        // Root containers have -1.
+        final int parentIndex;
+        final byte containerType;
+        // Only for containers.
+        int childCount;
+        // Only for non-containers.
+        @Nullable Object data;
+
+        public Element(int parentIndex, byte containerType)
         {
-            return objectKeys;
+            this.parentIndex = parentIndex;
+            this.containerType = containerType;
         }
     }
 
-    private static class StackItemForArray
-            extends StackItem
+    // This is an internal constructor for nested serialization.
+    private MessagePackGenerator(
+            int features,
+            ObjectCodec codec,
+            OutputStream out,
+            MessagePack.PackerConfig packerConfig)
     {
-        @Override
-        void addKey(Object key)
-        {
-            throw new IllegalStateException("This method shouldn't be called");
-        }
-
-        @Override
-        List<Object> getKeys()
-        {
-            throw new IllegalStateException("This method shouldn't be called");
-        }
+        super(features, codec);
+        this.output = out;
+        this.messagePacker = packerConfig.newPacker(out);
+        this.packerConfig = packerConfig;
+        this.elements = new ArrayList<>();
     }
 
     public MessagePackGenerator(
@@ -110,7 +119,16 @@ public class MessagePackGenerator
     {
         super(features, codec);
         this.output = out;
+        this.messagePacker = packerConfig.newPacker(getMessageBufferOutputForOutputStream(out, reuseResourceInGenerator));
+        this.packerConfig = packerConfig;
+        this.elements = new ArrayList<>();
+    }
 
+    private MessageBufferOutput getMessageBufferOutputForOutputStream(
+            OutputStream out,
+            boolean reuseResourceInGenerator)
+            throws IOException
+    {
         OutputStreamBufferOutput messageBufferOutput;
         if (reuseResourceInGenerator) {
             messageBufferOutput = messageBufferOutputHolder.get();
@@ -125,63 +143,67 @@ public class MessagePackGenerator
         else {
             messageBufferOutput = new OutputStreamBufferOutput(out);
         }
-        this.messagePacker = packerConfig.newPacker(messageBufferOutput);
-
-        this.packerConfig = packerConfig;
-
-        this.stack = new LinkedList<StackItem>();
+        return messageBufferOutput;
     }
 
     @Override
     public void writeStartArray()
-            throws IOException, JsonGenerationException
     {
-        _writeContext = _writeContext.createChildArrayContext();
-        stack.push(new StackItemForArray());
+        startCurrentContainer(CONTAINER_ARRAY);
     }
 
     @Override
     public void writeEndArray()
-            throws IOException, JsonGenerationException
+            throws IOException
     {
         if (!_writeContext.inArray()) {
             _reportError("Current context not an array but " + _writeContext.getTypeDesc());
         }
-
-        getStackTopForArray();
-
-        _writeContext = _writeContext.getParent();
-
-        popStackAndStoreTheItemAsValue();
+        endCurrentContainer();
     }
 
     @Override
     public void writeStartObject()
-            throws IOException, JsonGenerationException
     {
-        _writeContext = _writeContext.createChildObjectContext();
-        stack.push(new StackItemForObject());
+        startCurrentContainer(CONTAINER_OBJECT);
     }
 
     @Override
     public void writeEndObject()
-            throws IOException, JsonGenerationException
+            throws IOException
     {
         if (!_writeContext.inObject()) {
             _reportError("Current context not an object but " + _writeContext.getTypeDesc());
         }
+        endCurrentContainer();
+    }
 
-        StackItemForObject stackTop = getStackTopForObject();
-
-        if (stackTop.getKeys().size() != stackTop.getValues().size()) {
-            throw new IllegalStateException(
-                    String.format(
-                            "objectKeys.size() and objectValues.size() is not same: depth=%d, key=%d, value=%d",
-                            stack.size(), stackTop.getKeys().size(), stackTop.getValues().size()));
+    private void startCurrentContainer(byte containerType)
+    {
+        switch (containerType) {
+            case CONTAINER_OBJECT:
+                _writeContext = _writeContext.createChildObjectContext();
+                break;
+            case CONTAINER_ARRAY:
+                _writeContext = _writeContext.createChildArrayContext();
+                break;
+            default:
+                throw new AssertionError();
         }
-        _writeContext = _writeContext.getParent();
+        elements.add(new Element(currentParentElementIndex, containerType));
+        currentParentElementIndex = elements.size() - 1;
+    }
 
-        popStackAndStoreTheItemAsValue();
+    private void endCurrentContainer()
+    {
+        Element parent = elements.get(currentParentElementIndex);
+        parent.childCount = _writeContext.getEntryCount();
+        if (currentParentElementIndex == 0) {
+            isElementsClosed = true;
+        }
+        currentParentElementIndex = parent.parentIndex;
+        _writeContext = _writeContext.getParent();
+        _writeContext.writeValue();
     }
 
     private void pack(Object v)
@@ -208,6 +230,11 @@ public class MessagePackGenerator
                 messagePacker.addPayload(data);
             }
         }
+        else if (v instanceof AsciiCharString) {
+            byte[] bytes = ((AsciiCharString) v).bytes;
+            messagePacker.packRawStringHeader(bytes.length);
+            messagePacker.writePayload(bytes);
+        }
         else if (v instanceof String) {
             messagePacker.packString((String) v);
         }
@@ -216,12 +243,6 @@ public class MessagePackGenerator
         }
         else if (v instanceof Long) {
             messagePacker.packLong((Long) v);
-        }
-        else if (v instanceof StackItemForObject) {
-            packObject((StackItemForObject) v);
-        }
-        else if (v instanceof StackItemForArray) {
-            packArray((StackItemForArray) v);
         }
         else if (v instanceof Double) {
             messagePacker.packDouble((Double) v);
@@ -244,7 +265,7 @@ public class MessagePackGenerator
         else {
             messagePacker.flush();
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            MessagePackGenerator messagePackGenerator = new MessagePackGenerator(getFeatureMask(), getCodec(), outputStream, packerConfig, false);
+            MessagePackGenerator messagePackGenerator = new MessagePackGenerator(getFeatureMask(), getCodec(), outputStream, packerConfig);
             getCodec().writeValue(messagePackGenerator, v);
             output.write(outputStream.toByteArray());
         }
@@ -278,200 +299,302 @@ public class MessagePackGenerator
         }
     }
 
-    private void packObject(StackItemForObject stackItem)
+    private void packObject(Element container)
             throws IOException
     {
-        List<Object> keys = stackItem.getKeys();
-        List<Object> values = stackItem.getValues();
-
         MessagePacker messagePacker = getMessagePacker();
-        messagePacker.packMapHeader(keys.size());
-
-        for (int i = 0; i < keys.size(); i++) {
-            pack(keys.get(i));
-            pack(values.get(i));
-        }
+        messagePacker.packMapHeader(container.childCount);
     }
 
-    private void packArray(StackItemForArray stackItem)
+    private void packArray(Element container)
             throws IOException
     {
-        List<Object> values = stackItem.getValues();
-
         MessagePacker messagePacker = getMessagePacker();
-        messagePacker.packArrayHeader(values.size());
-
-        for (int i = 0; i < values.size(); i++) {
-            Object v = values.get(i);
-            pack(v);
-        }
+        messagePacker.packArrayHeader(container.childCount);
     }
 
-    @Override
-    public void writeFieldName(String name)
-            throws IOException, JsonGenerationException
+    @Nullable
+    private byte[] getBytesIfAscii(char[] chars, int offset, int len)
     {
-        addKeyToStackTop(name);
+        byte[] bytes = new byte[len];
+        for (int i = offset; i < offset + len; i++) {
+            char c = chars[i];
+            if (c >= 0x80) {
+                return null;
+            }
+            bytes[i] = (byte) c;
+        }
+        return bytes;
     }
 
-    @Override
-    public void writeFieldName(SerializableString name)
-            throws IOException
+    private boolean areAllAsciiBytes(byte[] bytes, int offset, int len)
     {
-        if (name instanceof MessagePackSerializedString) {
-            addKeyToStackTop(((MessagePackSerializedString) name).getRawValue());
+        for (int i = offset; i < offset + len; i++) {
+            if ((bytes[i] & 0x80) != 0) {
+                return false;
+            }
         }
-        else if (name instanceof SerializedString) {
-            addKeyToStackTop(name.getValue());
+        return true;
+    }
+
+    private void addContainerElement(Object data)
+    {
+        Element element = new Element(currentParentElementIndex, NON_CONTAINER);
+        element.data = data;
+        elements.add(element);
+    }
+
+    private void addElementKey(Object key)
+    {
+        if (!_writeContext.inObject()) {
+            throw new IllegalStateException();
+        }
+        addContainerElement(key);
+    }
+
+    private void addElementValue(Object value) throws IOException
+    {
+        if (_writeContext.inObject() || _writeContext.inArray()) {
+            addContainerElement(value);
         }
         else {
-            System.out.println(name.getClass());
+            pack(value);
+            flushMessagePacker();
+        }
+    }
+
+    @Override
+    public void writeFieldName(String name) throws IOException
+    {
+        if (STRING_VALUE_FIELD_IS_CHARS) {
+            char[] chars = name.toCharArray();
+            writeCharArrayTextKey(chars, 0, chars.length);
+        }
+        else {
+            addElementKey(name);
+        }
+        _writeContext.writeFieldName(name);
+    }
+
+    @Override
+    public void writeFieldName(SerializableString name) throws IOException
+    {
+        if (name instanceof MessagePackSerializedString) {
+            addElementKey(((MessagePackSerializedString) name).getRawValue());
+            _writeContext.writeFieldName(name.getValue());
+        }
+        else if (name instanceof SerializedString) {
+            writeFieldName(name.getValue());
+        }
+        else {
             throw new IllegalArgumentException("Unsupported key: " + name);
         }
     }
 
+    private void writeCharArrayTextKey(char[] text, int offset, int len)
+    {
+        byte[] bytes = getBytesIfAscii(text, offset, len);
+        if (bytes != null) {
+            addElementKey(new AsciiCharString(bytes));
+            return;
+        }
+        addElementKey(new String(text, offset, len));
+    }
+
+    private void writeCharArrayTextValue(char[] text, int offset, int len) throws IOException
+    {
+        byte[] bytes = getBytesIfAscii(text, offset, len);
+        if (bytes != null) {
+            addElementValue(new AsciiCharString(bytes));
+            return;
+        }
+        addElementValue(new String(text, offset, len));
+    }
+
+    private void writeByteArrayTextValue(byte[] text, int offset, int len) throws IOException
+    {
+        if (areAllAsciiBytes(text, offset, len)) {
+            addElementValue(new AsciiCharString(text));
+            return;
+        }
+        addElementValue(new String(text, offset, len, DEFAULT_CHARSET));
+    }
+
     @Override
     public void writeString(String text)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(text);
+        if (STRING_VALUE_FIELD_IS_CHARS) {
+            char[] chars = text.toCharArray();
+            writeCharArrayTextValue(chars, 0, chars.length);
+        }
+        else {
+            addElementValue(text);
+        }
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeString(char[] text, int offset, int len)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(new String(text, offset, len));
+        writeCharArrayTextValue(text, offset, len);
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeRawUTF8String(byte[] text, int offset, int length)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(new String(text, offset, length, DEFAULT_CHARSET));
+        writeByteArrayTextValue(text, offset, length);
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeUTF8String(byte[] text, int offset, int length)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(new String(text, offset, length, DEFAULT_CHARSET));
+        writeByteArrayTextValue(text, offset, length);
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeRaw(String text)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(text);
+        if (STRING_VALUE_FIELD_IS_CHARS) {
+            char[] chars = text.toCharArray();
+            writeCharArrayTextValue(chars, 0, chars.length);
+        }
+        else {
+            addElementValue(text);
+        }
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeRaw(String text, int offset, int len)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(text.substring(0, len));
+        // TODO: There is room to optimize this.
+        char[] chars = text.toCharArray();
+        writeCharArrayTextValue(chars, offset, len);
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeRaw(char[] text, int offset, int len)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(new String(text, offset, len));
+        writeCharArrayTextValue(text, offset, len);
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeRaw(char c)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(String.valueOf(c));
+        writeCharArrayTextValue(new char[] { c }, 0, 1);
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeBinary(Base64Variant b64variant, byte[] data, int offset, int len)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(ByteBuffer.wrap(data, offset, len));
+        addElementValue(ByteBuffer.wrap(data, offset, len));
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeNumber(int v)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(Integer.valueOf(v));
+        addElementValue(v);
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeNumber(long v)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(Long.valueOf(v));
+        addElementValue(v);
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeNumber(BigInteger v)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(v);
+        addElementValue(v);
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeNumber(double d)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(Double.valueOf(d));
+        addElementValue(d);
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeNumber(float f)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(Float.valueOf(f));
+        addElementValue(f);
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeNumber(BigDecimal dec)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(dec);
+        addElementValue(dec);
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeNumber(String encodedValue)
-            throws IOException, JsonGenerationException, UnsupportedOperationException
+            throws IOException, UnsupportedOperationException
     {
         // There is a room to improve this API's performance while the implementation is robust.
         // If users can use other MessagePackGenerator#writeNumber APIs that accept
         // proper numeric types not String, it's better to use the other APIs instead.
         try {
             long l = Long.parseLong(encodedValue);
-            addValueToStackTop(l);
+            addElementValue(l);
+            _writeContext.writeValue();
             return;
         }
-        catch (NumberFormatException e) {
+        catch (NumberFormatException ignored) {
         }
 
         try {
             double d = Double.parseDouble(encodedValue);
-            addValueToStackTop(d);
+            addElementValue(d);
+            _writeContext.writeValue();
             return;
         }
-        catch (NumberFormatException e) {
+        catch (NumberFormatException ignored) {
         }
 
         try {
             BigInteger bi = new BigInteger(encodedValue);
-            addValueToStackTop(bi);
+            addElementValue(bi);
+            _writeContext.writeValue();
             return;
         }
-        catch (NumberFormatException e) {
+        catch (NumberFormatException ignored) {
         }
 
         try {
             BigDecimal bc = new BigDecimal(encodedValue);
-            addValueToStackTop(bc);
+            addElementValue(bc);
+            _writeContext.writeValue();
             return;
         }
-        catch (NumberFormatException e) {
+        catch (NumberFormatException ignored) {
         }
 
         throw new NumberFormatException(encodedValue);
@@ -479,22 +602,25 @@ public class MessagePackGenerator
 
     @Override
     public void writeBoolean(boolean state)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(Boolean.valueOf(state));
+        addElementValue(state);
+        _writeContext.writeValue();
     }
 
     @Override
     public void writeNull()
-            throws IOException, JsonGenerationException
+            throws IOException
     {
-        addValueToStackTop(null);
+        addElementValue(null);
+        _writeContext.writeValue();
     }
 
     public void writeExtensionType(MessagePackExtensionType extensionType)
             throws IOException
     {
-        addValueToStackTop(extensionType);
+        addElementValue(extensionType);
+        _writeContext.writeValue();
     }
 
     @Override
@@ -505,6 +631,7 @@ public class MessagePackGenerator
             flush();
         }
         finally {
+            super.close();
             if (isEnabled(Feature.AUTO_CLOSE_TARGET)) {
                 MessagePacker messagePacker = getMessagePacker();
                 messagePacker.close();
@@ -516,19 +643,30 @@ public class MessagePackGenerator
     public void flush()
             throws IOException
     {
-        if (rootStackItem != null) {
-            if (rootStackItem instanceof StackItemForObject) {
-                packObject((StackItemForObject) rootStackItem);
-            }
-            else if (rootStackItem instanceof StackItemForArray) {
-                packArray((StackItemForArray) rootStackItem);
-            }
-            else {
-                throw new IllegalStateException("Unexpected rootStackItem: " + rootStackItem);
-            }
-            rootStackItem = null;
-            flushMessagePacker();
+        if (!isElementsClosed) {
+            // The whole elements are not closed yet.
+            return;
         }
+
+        for (int i = 0; i < elements.size(); i++) {
+            Element element = elements.get(i);
+            switch (element.containerType) {
+                case NON_CONTAINER:
+                    pack(element.data);
+                    break;
+                case CONTAINER_OBJECT:
+                    packObject(element);
+                    break;
+                case CONTAINER_ARRAY:
+                    packArray(element);
+                    break;
+                default:
+                    throw new AssertionError();
+            }
+        }
+        flushMessagePacker();
+        elements.clear();
+        isElementsClosed = false;
     }
 
     private void flushMessagePacker()
@@ -541,75 +679,21 @@ public class MessagePackGenerator
     @Override
     protected void _releaseBuffers()
     {
+        try {
+            messagePacker.close();
+        }
+        catch (IOException e) {
+            throw new RuntimeException("Failed to close MessagePacker", e);
+        }
     }
 
     @Override
     protected void _verifyValueWrite(String typeMsg)
-            throws IOException, JsonGenerationException
+            throws IOException
     {
         int status = _writeContext.writeValue();
         if (status == JsonWriteContext.STATUS_EXPECT_NAME) {
             _reportError("Can not " + typeMsg + ", expecting field name");
-        }
-    }
-
-    private StackItem getStackTop()
-    {
-        if (stack.isEmpty()) {
-            throw new IllegalStateException("The stack is empty");
-        }
-        return stack.getFirst();
-    }
-
-    private StackItemForObject getStackTopForObject()
-    {
-        StackItem stackTop = getStackTop();
-        if (!(stackTop instanceof StackItemForObject)) {
-            throw new IllegalStateException("The stack top should be Object: " + stackTop);
-        }
-        return (StackItemForObject) stackTop;
-    }
-
-    private StackItemForArray getStackTopForArray()
-    {
-        StackItem stackTop = getStackTop();
-        if (!(stackTop instanceof StackItemForArray)) {
-            throw new IllegalStateException("The stack top should be Array: " + stackTop);
-        }
-        return (StackItemForArray) stackTop;
-    }
-
-    private void addKeyToStackTop(Object key)
-    {
-        getStackTop().addKey(key);
-    }
-
-    private void addValueToStackTop(Object value)
-            throws IOException
-    {
-        if (stack.isEmpty()) {
-            pack(value);
-            flushMessagePacker();
-        }
-        else {
-            getStackTop().addValue(value);
-        }
-    }
-
-    private void popStackAndStoreTheItemAsValue()
-            throws IOException
-    {
-        StackItem child = stack.pop();
-        if (stack.size() > 0) {
-            addValueToStackTop(child);
-        }
-        else {
-            if (rootStackItem != null) {
-                throw new IllegalStateException("rootStackItem is not null");
-            }
-            else {
-                rootStackItem = child;
-            }
         }
     }
 
