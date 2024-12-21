@@ -31,19 +31,13 @@ public class JacksonBufferOutput implements MessageBufferOutput {
     private byte[] bytes;
 
     public JacksonBufferOutput(OutputStream out, IOContext ioContext) {
-        this(out, ioContext, 512);
-    }
-
-    public JacksonBufferOutput(OutputStream out, IOContext ioContext, int initialBufSize) {
         this.out = checkNotNull(out, "output is null");
         this.ioContext = checkNotNull(ioContext, "ioContext is null");
-        this.bytes = ioContext.allocReadIOBuffer(initialBufSize);
-        this.messageBuffer = MessageBuffer.wrap(bytes);
     }
 
     @Override
     public MessageBuffer next(int minimumSize) {
-        if (messageBuffer.size() < minimumSize) {
+        if (messageBuffer == null || messageBuffer.size() < minimumSize) {
             ioContext.releaseReadIOBuffer(bytes);
             bytes = ioContext.allocReadIOBuffer(minimumSize);
             messageBuffer = MessageBuffer.wrap(bytes);
@@ -73,6 +67,8 @@ public class JacksonBufferOutput implements MessageBufferOutput {
         }
         finally {
             ioContext.releaseReadIOBuffer(bytes);
+            bytes = null;
+            messageBuffer = null;
         }
     }
 
@@ -85,14 +81,17 @@ public class JacksonBufferOutput implements MessageBufferOutput {
      * Reset Stream. This method doesn't close the old stream.
      *
      * @param out new stream
-     * @return the old stream
+     * @param ioContext new IOContext
      */
-    public OutputStream reset(OutputStream out, IOContext ioContext)
+    public void reset(OutputStream out, IOContext ioContext)
             throws IOException
     {
-        OutputStream old = this.out;
+        if (bytes != null) {
+            this.ioContext.releaseReadIOBuffer(bytes);
+            bytes = null;
+            this.messageBuffer = null;
+        }
         this.out = out;
         this.ioContext = ioContext;
-        return old;
     }
 }

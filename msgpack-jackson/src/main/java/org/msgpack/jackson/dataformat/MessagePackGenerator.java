@@ -26,6 +26,7 @@ import com.fasterxml.jackson.core.json.JsonWriteContext;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessagePacker;
 import org.msgpack.core.annotations.Nullable;
+import org.msgpack.core.buffer.MessageBufferOutput;
 import org.msgpack.core.buffer.OutputStreamBufferOutput;
 
 import java.io.ByteArrayOutputStream;
@@ -42,7 +43,7 @@ public class MessagePackGenerator
 {
     private static final Charset DEFAULT_CHARSET = Charset.forName("UTF-8");
     private final MessagePacker messagePacker;
-    private static ThreadLocal<OutputStreamBufferOutput> messageBufferOutputHolder = new ThreadLocal<>();
+    private static ThreadLocal<JacksonBufferOutput> messageBufferOutputHolder = new ThreadLocal<>();
     private final OutputStream output;
     private final MessagePack.PackerConfig packerConfig;
     private Deque<StackItem> stack;
@@ -110,6 +111,22 @@ public class MessagePackGenerator
         }
     }
 
+    // This is an internal constructor for nested serialization.
+    private MessagePackGenerator(
+            IOContext ctxt,
+            int features,
+            ObjectCodec codec,
+            OutputStream out,
+            MessagePack.PackerConfig packerConfig)
+    {
+        super(features, codec);
+        this.ioContext = ctxt;
+        this.output = out;
+        this.messagePacker = packerConfig.newPacker(out);
+        this.packerConfig = packerConfig;
+        this.stack = new ArrayDeque<>();
+    }
+
     public MessagePackGenerator(
             IOContext ctxt,
             int features,
@@ -122,23 +139,27 @@ public class MessagePackGenerator
         super(features, codec);
         this.ioContext = ctxt;
         this.output = out;
-        OutputStreamBufferOutput messageBufferOutput;
+        this.messagePacker = packerConfig.newPacker(getMessageBufferOutputForOutputStream(ctxt, out, reuseResourceInGenerator));
+        this.packerConfig = packerConfig;
+        this.stack = new ArrayDeque<>();
+    }
+
+    private MessageBufferOutput getMessageBufferOutputForOutputStream(IOContext ctxt, OutputStream out, boolean reuseResourceInGenerator) throws IOException {
+        JacksonBufferOutput messageBufferOutput;
         if (reuseResourceInGenerator) {
             messageBufferOutput = messageBufferOutputHolder.get();
             if (messageBufferOutput == null) {
-                messageBufferOutput = new OutputStreamBufferOutput(out);
+                messageBufferOutput = new JacksonBufferOutput(out, ctxt);
                 messageBufferOutputHolder.set(messageBufferOutput);
             }
             else {
-                messageBufferOutput.reset(out);
+                messageBufferOutput.reset(out, ctxt);
             }
         }
         else {
-            messageBufferOutput = new OutputStreamBufferOutput(out);
+            messageBufferOutput = new JacksonBufferOutput(out, ctxt);
         }
-        this.messagePacker = packerConfig.newPacker(messageBufferOutput);
-        this.packerConfig = packerConfig;
-        this.stack = new ArrayDeque<>();
+        return messageBufferOutput;
     }
 
     @Override
@@ -259,7 +280,7 @@ public class MessagePackGenerator
         else {
             messagePacker.flush();
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            MessagePackGenerator messagePackGenerator = new MessagePackGenerator(ioContext, getFeatureMask(), getCodec(), outputStream, packerConfig, false);
+            MessagePackGenerator messagePackGenerator = new MessagePackGenerator(ioContext, getFeatureMask(), getCodec(), outputStream, packerConfig);
             getCodec().writeValue(messagePackGenerator, v);
             output.write(outputStream.toByteArray());
         }
