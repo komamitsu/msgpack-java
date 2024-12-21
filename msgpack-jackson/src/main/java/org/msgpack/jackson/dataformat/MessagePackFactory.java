@@ -38,6 +38,7 @@ public class MessagePackFactory
     private static final long serialVersionUID = 2578263992015504347L;
 
     private final MessagePack.PackerConfig packerConfig;
+    private boolean reuseResourceInGenerator = true;
     private boolean reuseResourceInParser = true;
     private ExtensionTypeCustomDeserializers extTypeCustomDesers;
 
@@ -55,10 +56,17 @@ public class MessagePackFactory
     {
         super(src, null);
         this.packerConfig = src.packerConfig.clone();
+        this.reuseResourceInGenerator = src.reuseResourceInGenerator;
         this.reuseResourceInParser = src.reuseResourceInParser;
         if (src.extTypeCustomDesers != null) {
             this.extTypeCustomDesers = new ExtensionTypeCustomDeserializers(src.extTypeCustomDesers);
         }
+    }
+
+    public MessagePackFactory setReuseResourceInGenerator(boolean reuseResourceInGenerator)
+    {
+        this.reuseResourceInGenerator = reuseResourceInGenerator;
+        return this;
     }
 
     public MessagePackFactory setReuseResourceInParser(boolean reuseResourceInParser)
@@ -78,7 +86,7 @@ public class MessagePackFactory
             throws IOException
     {
         IOContext ctxt = _createContext(_createContentReference(out), false);
-        return new MessagePackGenerator(ctxt, _generatorFeatures, _objectCodec, out, packerConfig);
+        return new MessagePackGenerator(ctxt, _generatorFeatures, _objectCodec, out, packerConfig, reuseResourceInGenerator);
     }
 
     @Override

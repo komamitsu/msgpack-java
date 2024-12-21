@@ -26,7 +26,10 @@ import com.fasterxml.jackson.core.json.JsonWriteContext;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessagePacker;
 import org.msgpack.core.annotations.Nullable;
+import org.msgpack.core.buffer.MessageBufferOutput;
+import org.msgpack.core.buffer.OutputStreamBufferOutput;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.math.BigDecimal;
@@ -40,6 +43,8 @@ public class MessagePackGenerator
 {
     private static final Charset DEFAULT_CHARSET = Charset.forName("UTF-8");
     private final MessagePacker messagePacker;
+    private static ThreadLocal<JacksonBufferOutput> messageBufferOutputHolder = new ThreadLocal<>();
+    private final OutputStream output;
     private final MessagePack.PackerConfig packerConfig;
     private Deque<StackItem> stack;
     private StackItem rootStackItem;
@@ -107,31 +112,32 @@ public class MessagePackGenerator
     }
 
     public MessagePackGenerator(
-            IOContext ioContext,
+            IOContext ctxt,
             int features,
             ObjectCodec codec,
             OutputStream out,
-            MessagePack.PackerConfig packerConfig)
+            MessagePack.PackerConfig packerConfig,
+            boolean reuseResourceInGenerator)
             throws IOException
     {
-        super(features, codec, ioContext);
-        this.ioContext = ioContext;
-        this.messagePacker = packerConfig.newPacker(new JacksonBufferOutput(out, ioContext));
-        this.packerConfig = packerConfig;
-        this.stack = new ArrayDeque<>();
-    }
-
-    private MessagePackGenerator(
-            IOContext ioContext,
-            int features,
-            ObjectCodec codec,
-            MessagePacker messagePacker,
-            MessagePack.PackerConfig packerConfig)
-            throws IOException
-    {
-        super(features, codec, ioContext);
-        this.ioContext = ioContext;
-        this.messagePacker = messagePacker;
+        super(features, codec);
+        this.ioContext = ctxt;
+        this.output = out;
+        JacksonBufferOutput messageBufferOutput;
+        if (reuseResourceInGenerator) {
+            messageBufferOutput = messageBufferOutputHolder.get();
+            if (messageBufferOutput == null) {
+                messageBufferOutput = new JacksonBufferOutput(out, ctxt);
+                messageBufferOutputHolder.set(messageBufferOutput);
+            }
+            else {
+                messageBufferOutput.reset(out, ctxt);
+            }
+        }
+        else {
+            messageBufferOutput = new JacksonBufferOutput(out, ctxt);
+        }
+        this.messagePacker = packerConfig.newPacker(messageBufferOutput);
         this.packerConfig = packerConfig;
         this.stack = new ArrayDeque<>();
     }
@@ -252,8 +258,11 @@ public class MessagePackGenerator
             messagePacker.writePayload(extData);
         }
         else {
-            MessagePackGenerator messagePackGenerator = new MessagePackGenerator(ioContext, getFeatureMask(), getCodec(), messagePacker, packerConfig);
+            messagePacker.flush();
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            MessagePackGenerator messagePackGenerator = new MessagePackGenerator(ioContext, getFeatureMask(), getCodec(), outputStream, packerConfig, false);
             getCodec().writeValue(messagePackGenerator, v);
+            output.write(outputStream.toByteArray());
         }
     }
 
