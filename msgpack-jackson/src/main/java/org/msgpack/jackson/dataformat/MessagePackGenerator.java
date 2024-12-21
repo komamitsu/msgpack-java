@@ -318,7 +318,7 @@ public class MessagePackGenerator
         byte[] bytes = new byte[len];
         for (int i = offset; i < offset + len; i++) {
             char c = chars[i];
-            if ((bytes[i] & 0x80) != 0) {
+            if (c >= 0x80) {
                 return null;
             }
             bytes[i] = (byte) c;
@@ -376,7 +376,7 @@ public class MessagePackGenerator
             addValueToStackTop(new AsciiCharString(bytes));
             return;
         }
-        addValueToStackTop(text);
+        addValueToStackTop(new String(text, offset, len));
     }
 
     private void writeByteArrayText(byte[] text, int offset, int len) throws IOException {

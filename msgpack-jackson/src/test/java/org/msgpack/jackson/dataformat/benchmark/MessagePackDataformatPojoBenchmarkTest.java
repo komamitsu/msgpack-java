@@ -15,7 +15,6 @@
 //
 package org.msgpack.jackson.dataformat.benchmark;
 
-import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.Test;
@@ -23,9 +22,6 @@ import org.msgpack.jackson.dataformat.MessagePackFactory;
 import static org.msgpack.jackson.dataformat.MessagePackDataformatTestBase.NormalPojo;
 import static org.msgpack.jackson.dataformat.MessagePackDataformatTestBase.Suit;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.OutputStream;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
@@ -45,9 +41,6 @@ public class MessagePackDataformatPojoBenchmarkTest
 
     public MessagePackDataformatPojoBenchmarkTest()
     {
-//        origObjectMapper.configure(JsonGenerator.Feature.AUTO_CLOSE_TARGET, false);
-//        msgpackObjectMapper.configure(JsonGenerator.Feature.AUTO_CLOSE_TARGET, false);
-
         for (int i = 0; i < LOOP_MAX; i++) {
             NormalPojo pojo = new NormalPojo();
             pojo.i = i;
@@ -76,6 +69,7 @@ public class MessagePackDataformatPojoBenchmarkTest
                     break;
             }
             pojo.b = new byte[] {(byte) i};
+            pojo.sMultibyte = "012345678Ⅸ";
             pojos.add(pojo);
         }
 

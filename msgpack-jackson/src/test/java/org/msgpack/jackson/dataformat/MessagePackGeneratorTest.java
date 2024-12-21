@@ -284,6 +284,8 @@ public class MessagePackGeneratorTest
         generator.writeNumber(0);
         generator.writeString("one");
         generator.writeNumber(2.0f);
+        generator.writeString("三");
+        generator.writeString("444④");
         generator.flush();
         generator.close();
 
@@ -292,6 +294,8 @@ public class MessagePackGeneratorTest
         assertEquals(0, unpacker.unpackInt());
         assertEquals("one", unpacker.unpackString());
         assertEquals(2.0f, unpacker.unpackFloat(), 0.001f);
+        assertEquals("三", unpacker.unpackString());
+        assertEquals("444④", unpacker.unpackString());
         assertFalse(unpacker.hasNext());
     }
 
