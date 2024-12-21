@@ -41,9 +41,6 @@ public class MessagePackGenerator
 {
     private static final Charset DEFAULT_CHARSET = Charset.forName("UTF-8");
     private final MessagePacker messagePacker;
-    /*
-    private static ThreadLocal<OutputStreamBufferOutput> messageBufferOutputHolder = new ThreadLocal<OutputStreamBufferOutput>();
-     */
     private final OutputStream output;
     private final MessagePack.PackerConfig packerConfig;
     private Deque<StackItem> stack;
@@ -122,29 +119,8 @@ public class MessagePackGenerator
         super(features, codec, ioContext);
         this.ioContext = ioContext;
         this.output = out;
-
-        /*
-        OutputStreamBufferOutput messageBufferOutput;
-        if (reuseResourceInGenerator) {
-            messageBufferOutput = messageBufferOutputHolder.get();
-            if (messageBufferOutput == null) {
-                messageBufferOutput = new OutputStreamBufferOutput(out, 1024);
-                messageBufferOutputHolder.set(messageBufferOutput);
-            }
-            else {
-                messageBufferOutput.reset(out);
-            }
-        }
-        else {
-            messageBufferOutput = new OutputStreamBufferOutput(out, 1024);
-        }
-
-        this.messagePacker = packerConfig.newPacker(messageBufferOutput);
-         */
         this.messagePacker = packerConfig.newPacker(new JacksonBufferOutput(out, ioContext));
-
         this.packerConfig = packerConfig;
-
         this.stack = new ArrayDeque<>();
     }
 
@@ -164,7 +140,7 @@ public class MessagePackGenerator
             _reportError("Current context not an array but " + _writeContext.getTypeDesc());
         }
 
-//        getStackTopForArray();
+        getStackTopForArray();
 
         _writeContext = _writeContext.getParent();
 
@@ -187,7 +163,6 @@ public class MessagePackGenerator
             _reportError("Current context not an object but " + _writeContext.getTypeDesc());
         }
 
-        /*
         StackItemForObject stackTop = getStackTopForObject();
 
         if (stackTop.getKeys().size() != stackTop.getValues().size()) {
@@ -196,7 +171,6 @@ public class MessagePackGenerator
                             "objectKeys.size() and objectValues.size() is not same: depth=%d, key=%d, value=%d",
                             stack.size(), stackTop.getKeys().size(), stackTop.getValues().size()));
         }
-         */
 
         _writeContext = _writeContext.getParent();
 
@@ -311,9 +285,8 @@ public class MessagePackGenerator
         MessagePacker messagePacker = getMessagePacker();
         messagePacker.packMapHeader(keys.size());
 
-        int i = 0;
-        for (Object key : keys) {
-            pack(key);
+        for (int i = 0; i < keys.size(); i++) {
+            pack(keys.get(i));
             pack(values.get(i));
         }
     }
@@ -326,8 +299,8 @@ public class MessagePackGenerator
         MessagePacker messagePacker = getMessagePacker();
         messagePacker.packArrayHeader(values.size());
 
-        for (Object value : values) {
-            pack(value);
+        for (int i = 0; i < values.size(); i++) {
+            pack(values.get(i));
         }
     }
 
