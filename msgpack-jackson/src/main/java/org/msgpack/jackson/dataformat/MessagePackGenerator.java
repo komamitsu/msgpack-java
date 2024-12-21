@@ -634,16 +634,16 @@ public class MessagePackGenerator
             throws IOException
     {
         StackItem child = stack.pop();
-        if (stack.size() > 0) {
-            addValueToStackTop(child);
-        }
-        else {
+        if (stack.isEmpty()) {
             if (rootStackItem != null) {
                 throw new IllegalStateException("rootStackItem is not null");
             }
             else {
                 rootStackItem = child;
             }
+        }
+        else {
+            addValueToStackTop(child);
         }
     }
 
