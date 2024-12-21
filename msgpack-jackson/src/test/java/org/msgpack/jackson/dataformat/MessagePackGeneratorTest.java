@@ -907,7 +907,7 @@ public class MessagePackGeneratorTest
     {
         // The purpose of this test is to confirm if MessagePackFactory.setReuseResourceInGenerator(false)
         // works as a workaround for https://github.com/msgpack/msgpack-java/issues/508
-        ObjectMapper objectMapper = new ObjectMapper(new MessagePackFactory());
+        ObjectMapper objectMapper = new ObjectMapper(new MessagePackFactory().setReuseResourceInGenerator(false));
         OuterClass outerClass = objectMapper.readValue(
                 objectMapper.writeValueAsBytes(new OuterClass("Foo")),
                 OuterClass.class);

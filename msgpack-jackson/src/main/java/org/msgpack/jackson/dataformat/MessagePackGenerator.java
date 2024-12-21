@@ -26,7 +26,6 @@ import com.fasterxml.jackson.core.json.JsonWriteContext;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessagePacker;
 import org.msgpack.core.annotations.Nullable;
-import org.msgpack.core.buffer.MessageBufferOutput;
 import org.msgpack.core.buffer.OutputStreamBufferOutput;
 
 import java.io.ByteArrayOutputStream;
@@ -43,7 +42,7 @@ public class MessagePackGenerator
 {
     private static final Charset DEFAULT_CHARSET = Charset.forName("UTF-8");
     private final MessagePacker messagePacker;
-    private static ThreadLocal<JacksonBufferOutput> messageBufferOutputHolder = new ThreadLocal<>();
+    private static ThreadLocal<OutputStreamBufferOutput> messageBufferOutputHolder = new ThreadLocal<>();
     private final OutputStream output;
     private final MessagePack.PackerConfig packerConfig;
     private Deque<StackItem> stack;
@@ -123,19 +122,19 @@ public class MessagePackGenerator
         super(features, codec);
         this.ioContext = ctxt;
         this.output = out;
-        JacksonBufferOutput messageBufferOutput;
+        OutputStreamBufferOutput messageBufferOutput;
         if (reuseResourceInGenerator) {
             messageBufferOutput = messageBufferOutputHolder.get();
             if (messageBufferOutput == null) {
-                messageBufferOutput = new JacksonBufferOutput(out, ctxt);
+                messageBufferOutput = new OutputStreamBufferOutput(out);
                 messageBufferOutputHolder.set(messageBufferOutput);
             }
             else {
-                messageBufferOutput.reset(out, ctxt);
+                messageBufferOutput.reset(out);
             }
         }
         else {
-            messageBufferOutput = new JacksonBufferOutput(out, ctxt);
+            messageBufferOutput = new OutputStreamBufferOutput(out);
         }
         this.messagePacker = packerConfig.newPacker(messageBufferOutput);
         this.packerConfig = packerConfig;
