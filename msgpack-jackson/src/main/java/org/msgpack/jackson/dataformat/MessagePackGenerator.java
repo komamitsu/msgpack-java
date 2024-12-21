@@ -598,7 +598,11 @@ public class MessagePackGenerator
     @Override
     protected void _releaseBuffers()
     {
-        throw new UnsupportedOperationException();
+        try {
+            messagePacker.close();
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to close MessagePacker", e);
+        }
     }
 
     @Override
