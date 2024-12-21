@@ -340,12 +340,7 @@ public class MessagePackGenerator
             throws IOException, JsonGenerationException
     {
         char[] chars = name.toCharArray();
-        byte[] bytes = getBytesIfAscii(chars, 0, chars.length);
-        if (bytes != null) {
-            addKeyToStackTop(new AsciiCharString(bytes));
-            return;
-        }
-        addKeyToStackTop(name);
+        writeCharArrayTextKey(chars, 0, chars.length);
     }
 
     @Override
@@ -357,12 +352,7 @@ public class MessagePackGenerator
         }
         else if (name instanceof SerializedString) {
             char[] chars = name.getValue().toCharArray();
-            byte[] bytes = getBytesIfAscii(chars, 0, chars.length);
-            if (bytes != null) {
-                addKeyToStackTop(new AsciiCharString(bytes));
-                return;
-            }
-            addKeyToStackTop(name);
+            writeCharArrayTextKey(chars, 0, chars.length);
         }
         else {
             System.out.println(name.getClass());
@@ -370,7 +360,16 @@ public class MessagePackGenerator
         }
     }
 
-    private void writeCharArrayText(char[] text, int offset, int len) throws IOException {
+    private void writeCharArrayTextKey(char[] text, int offset, int len) throws IOException {
+        byte[] bytes = getBytesIfAscii(text, offset, len);
+        if (bytes != null) {
+            addKeyToStackTop(new AsciiCharString(bytes));
+            return;
+        }
+        addKeyToStackTop(new String(text, offset, len));
+    }
+
+    private void writeCharArrayTextValue(char[] text, int offset, int len) throws IOException {
         byte[] bytes = getBytesIfAscii(text, offset, len);
         if (bytes != null) {
             addValueToStackTop(new AsciiCharString(bytes));
@@ -379,7 +378,7 @@ public class MessagePackGenerator
         addValueToStackTop(new String(text, offset, len));
     }
 
-    private void writeByteArrayText(byte[] text, int offset, int len) throws IOException {
+    private void writeByteArrayTextValue(byte[] text, int offset, int len) throws IOException {
         if (areAllAsciiBytes(text, offset, len)) {
             addValueToStackTop(new AsciiCharString(text));
         }
@@ -390,28 +389,28 @@ public class MessagePackGenerator
     public void writeString(String text)
             throws IOException {
         char[] chars = text.toCharArray();
-        writeCharArrayText(chars, 0, chars.length);
+        writeCharArrayTextValue(chars, 0, chars.length);
     }
 
     @Override
     public void writeString(char[] text, int offset, int len)
             throws IOException, JsonGenerationException
     {
-        writeCharArrayText(text, offset, len);
+        writeCharArrayTextValue(text, offset, len);
     }
 
     @Override
     public void writeRawUTF8String(byte[] text, int offset, int length)
             throws IOException, JsonGenerationException
     {
-        writeByteArrayText(text, offset, length);
+        writeByteArrayTextValue(text, offset, length);
     }
 
     @Override
     public void writeUTF8String(byte[] text, int offset, int length)
             throws IOException, JsonGenerationException
     {
-        writeByteArrayText(text, offset, length);
+        writeByteArrayTextValue(text, offset, length);
     }
 
     @Override
@@ -419,28 +418,28 @@ public class MessagePackGenerator
             throws IOException, JsonGenerationException
     {
         char[] chars = text.toCharArray();
-        writeCharArrayText(chars, 0, chars.length);
+        writeCharArrayTextValue(chars, 0, chars.length);
     }
 
     @Override
     public void writeRaw(String text, int offset, int len)
             throws IOException {
         char[] chars = text.toCharArray();
-        writeCharArrayText(chars, offset, len);
+        writeCharArrayTextValue(chars, offset, len);
     }
 
     @Override
     public void writeRaw(char[] text, int offset, int len)
             throws IOException, JsonGenerationException
     {
-        writeCharArrayText(text, offset, len);
+        writeCharArrayTextValue(text, offset, len);
     }
 
     @Override
     public void writeRaw(char c)
             throws IOException, JsonGenerationException
     {
-        writeCharArrayText(new char[] { c }, 0, 1);
+        writeCharArrayTextValue(new char[] { c }, 0, 1);
     }
 
     @Override
