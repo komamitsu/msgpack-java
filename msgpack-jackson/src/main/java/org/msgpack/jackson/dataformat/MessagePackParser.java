@@ -76,7 +76,7 @@ public class MessagePackParser
     private String stringValue;
     private BigInteger biValue;
     private MessagePackExtensionType extensionTypeValue;
-    private boolean reuseResourceInParser;
+    private final boolean reuseResourceInParser;
 
     private abstract static class StackItem
     {
@@ -130,7 +130,7 @@ public class MessagePackParser
             boolean reuseResourceInParser)
             throws IOException
     {
-        this(ctxt, features, new InputStreamBufferInput(in), objectCodec, in, reuseResourceInParser);
+        this(ctxt, features, new JacksonBufferInput(in, ctxt), objectCodec, in, reuseResourceInParser);
     }
 
     public MessagePackParser(IOContext ctxt, int features, ObjectCodec objectCodec, byte[] bytes)
