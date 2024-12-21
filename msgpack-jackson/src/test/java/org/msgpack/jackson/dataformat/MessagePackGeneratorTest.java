@@ -40,6 +40,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -382,23 +383,24 @@ public class MessagePackGeneratorTest
             throws Exception
     {
         File tempFile = createTempFile();
-        OutputStream out = new FileOutputStream(tempFile);
+        try (OutputStream out = Files.newOutputStream(tempFile.toPath())) {
+            ObjectMapper objectMapper = new ObjectMapper(new MessagePackFactory());
+            objectMapper.configure(JsonGenerator.Feature.AUTO_CLOSE_TARGET, false);
+            objectMapper.writeValue(out, 1);
+            objectMapper.writeValue(out, "two");
+            objectMapper.writeValue(out, 3.14);
+            objectMapper.writeValue(out, Arrays.asList(4));
+            objectMapper.writeValue(out, 5L);
+        }
 
-        ObjectMapper objectMapper = new ObjectMapper(new MessagePackFactory());
-        objectMapper.configure(JsonGenerator.Feature.AUTO_CLOSE_TARGET, false);
-        objectMapper.writeValue(out, 1);
-        objectMapper.writeValue(out, "two");
-        objectMapper.writeValue(out, 3.14);
-        objectMapper.writeValue(out, Arrays.asList(4));
-        objectMapper.writeValue(out, 5L);
-
-        MessageUnpacker unpacker = MessagePack.newDefaultUnpacker(new FileInputStream(tempFile));
-        assertEquals(1, unpacker.unpackInt());
-        assertEquals("two", unpacker.unpackString());
-        assertEquals(3.14, unpacker.unpackFloat(), 0.0001);
-        assertEquals(1, unpacker.unpackArrayHeader());
-        assertEquals(4, unpacker.unpackInt());
-        assertEquals(5, unpacker.unpackLong());
+        try (MessageUnpacker unpacker = MessagePack.newDefaultUnpacker(new FileInputStream(tempFile))) {
+            assertEquals(1, unpacker.unpackInt());
+            assertEquals("two", unpacker.unpackString());
+            assertEquals(3.14, unpacker.unpackFloat(), 0.0001);
+            assertEquals(1, unpacker.unpackArrayHeader());
+            assertEquals(4, unpacker.unpackInt());
+            assertEquals(5, unpacker.unpackLong());
+        }
     }
 
     @Test
@@ -442,10 +444,11 @@ public class MessagePackGeneratorTest
                 throw exception;
             }
             else {
-                ByteArrayOutputStream outputStream = buffers.get(ti);
-                MessageUnpacker unpacker = MessagePack.newDefaultUnpacker(outputStream.toByteArray());
-                for (int i = 0; i < loopCount; i++) {
-                    assertEquals(ti, unpacker.unpackInt());
+                try (ByteArrayOutputStream outputStream = buffers.get(ti);
+                MessageUnpacker unpacker = MessagePack.newDefaultUnpacker(outputStream.toByteArray())) {
+                    for (int i = 0; i < loopCount; i++) {
+                        assertEquals(ti, unpacker.unpackInt());
+                    }
                 }
             }
         }
