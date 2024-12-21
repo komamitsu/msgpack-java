@@ -55,7 +55,6 @@ public class MessagePackGenerator
 
     private abstract static class StackItem
     {
-        protected List<Object> objectKeys = new ArrayList<Object>();
         protected List<Object> objectValues = new ArrayList<Object>();
 
         abstract void addKey(Object key);
@@ -76,6 +75,8 @@ public class MessagePackGenerator
     private static class StackItemForObject
             extends StackItem
     {
+        private List<Object> objectKeys = new ArrayList<Object>();
+
         @Override
         void addKey(Object key)
         {
@@ -313,23 +314,33 @@ public class MessagePackGenerator
     }
 
     @Nullable
-    private byte[] getBytesIfAscii(char[] chars) throws IOException {
-        byte[] bytes = new byte[chars.length];
-        int i = 0;
-        for (char c : chars) {
-            if (c > 0x7F) {
+    private byte[] getBytesIfAscii(char[] chars, int offset, int len) {
+        byte[] bytes = new byte[len];
+        for (int i = offset; i < offset + len; i++) {
+            char c = chars[i];
+            if ((bytes[i] & 0x80) != 0) {
                 return null;
             }
-            bytes[i++] = (byte) c;
+            bytes[i] = (byte) c;
         }
         return bytes;
+    }
+
+    private boolean areAllAsciiBytes(byte[] bytes, int offset, int len) {
+        for (int i = offset; i < offset + len; i++) {
+            if ((bytes[i] & 0x80) != 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
     public void writeFieldName(String name)
             throws IOException, JsonGenerationException
     {
-        byte[] bytes = getBytesIfAscii(name.toCharArray());
+        char[] chars = name.toCharArray();
+        byte[] bytes = getBytesIfAscii(chars, 0, chars.length);
         if (bytes != null) {
             addKeyToStackTop(new AsciiCharString(bytes));
             return;
@@ -345,7 +356,8 @@ public class MessagePackGenerator
             addKeyToStackTop(((MessagePackSerializedString) name).getRawValue());
         }
         else if (name instanceof SerializedString) {
-            byte[] bytes = getBytesIfAscii(name.getValue().toCharArray());
+            char[] chars = name.getValue().toCharArray();
+            byte[] bytes = getBytesIfAscii(chars, 0, chars.length);
             if (bytes != null) {
                 addKeyToStackTop(new AsciiCharString(bytes));
                 return;
@@ -358,11 +370,8 @@ public class MessagePackGenerator
         }
     }
 
-    @Override
-    public void writeString(String text)
-            throws IOException, JsonGenerationException
-    {
-        byte[] bytes = getBytesIfAscii(text.toCharArray());
+    private void writeCharArrayText(char[] text, int offset, int len) throws IOException {
+        byte[] bytes = getBytesIfAscii(text, offset, len);
         if (bytes != null) {
             addValueToStackTop(new AsciiCharString(bytes));
             return;
@@ -370,60 +379,68 @@ public class MessagePackGenerator
         addValueToStackTop(text);
     }
 
+    private void writeByteArrayText(byte[] text, int offset, int len) throws IOException {
+        if (areAllAsciiBytes(text, offset, len)) {
+            addValueToStackTop(new AsciiCharString(text));
+        }
+        addValueToStackTop(new String(text, offset, len, DEFAULT_CHARSET));
+    }
+
+    @Override
+    public void writeString(String text)
+            throws IOException {
+        char[] chars = text.toCharArray();
+        writeCharArrayText(chars, 0, chars.length);
+    }
+
     @Override
     public void writeString(char[] text, int offset, int len)
             throws IOException, JsonGenerationException
     {
-        // TODO
-        addValueToStackTop(new String(text, offset, len));
+        writeCharArrayText(text, offset, len);
     }
 
     @Override
     public void writeRawUTF8String(byte[] text, int offset, int length)
             throws IOException, JsonGenerationException
     {
-        // TODO
-        addValueToStackTop(new String(text, offset, length, DEFAULT_CHARSET));
+        writeByteArrayText(text, offset, length);
     }
 
     @Override
     public void writeUTF8String(byte[] text, int offset, int length)
             throws IOException, JsonGenerationException
     {
-        // TODO
-        addValueToStackTop(new String(text, offset, length, DEFAULT_CHARSET));
+        writeByteArrayText(text, offset, length);
     }
 
     @Override
     public void writeRaw(String text)
             throws IOException, JsonGenerationException
     {
-        // TODO
-        addValueToStackTop(text);
+        char[] chars = text.toCharArray();
+        writeCharArrayText(chars, 0, chars.length);
     }
 
     @Override
     public void writeRaw(String text, int offset, int len)
-            throws IOException, JsonGenerationException
-    {
-        // TODO
-        addValueToStackTop(text.substring(0, len));
+            throws IOException {
+        char[] chars = text.toCharArray();
+        writeCharArrayText(chars, offset, len);
     }
 
     @Override
     public void writeRaw(char[] text, int offset, int len)
             throws IOException, JsonGenerationException
     {
-        // TODO
-        addValueToStackTop(new String(text, offset, len));
+        writeCharArrayText(text, offset, len);
     }
 
     @Override
     public void writeRaw(char c)
             throws IOException, JsonGenerationException
     {
-        // TODO
-        addValueToStackTop(String.valueOf(c));
+        writeCharArrayText(new char[] { c }, 0, 1);
     }
 
     @Override
