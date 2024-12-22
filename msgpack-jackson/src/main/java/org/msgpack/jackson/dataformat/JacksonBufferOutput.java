@@ -24,19 +24,22 @@ import java.io.OutputStream;
 
 import static org.msgpack.core.Preconditions.checkNotNull;
 
-public class JacksonBufferOutput implements MessageBufferOutput {
+public class JacksonBufferOutput implements MessageBufferOutput
+{
     private OutputStream out;
     private IOContext ioContext;
     private MessageBuffer messageBuffer;
     private byte[] bytes;
 
-    public JacksonBufferOutput(OutputStream out, IOContext ioContext) {
+    public JacksonBufferOutput(OutputStream out, IOContext ioContext)
+    {
         this.out = checkNotNull(out, "output is null");
         this.ioContext = checkNotNull(ioContext, "ioContext is null");
     }
 
     @Override
-    public MessageBuffer next(int minimumSize) {
+    public MessageBuffer next(int minimumSize)
+    {
         if (messageBuffer == null || messageBuffer.size() < minimumSize) {
             ioContext.releaseReadIOBuffer(bytes);
             bytes = ioContext.allocReadIOBuffer(minimumSize);
@@ -46,22 +49,26 @@ public class JacksonBufferOutput implements MessageBufferOutput {
     }
 
     @Override
-    public void writeBuffer(int length) throws IOException {
+    public void writeBuffer(int length) throws IOException
+    {
         write(messageBuffer.array(), messageBuffer.arrayOffset(), length);
     }
 
     @Override
-    public void write(byte[] buffer, int offset, int length) throws IOException {
+    public void write(byte[] buffer, int offset, int length) throws IOException
+    {
         out.write(buffer, offset, length);
     }
 
     @Override
-    public void add(byte[] buffer, int offset, int length) throws IOException {
+    public void add(byte[] buffer, int offset, int length) throws IOException
+    {
         write(buffer, offset, length);
     }
 
     @Override
-    public void close() throws IOException {
+    public void close() throws IOException
+    {
         try {
             out.close();
         }
@@ -73,7 +80,8 @@ public class JacksonBufferOutput implements MessageBufferOutput {
     }
 
     @Override
-    public void flush() throws IOException {
+    public void flush() throws IOException
+    {
         out.flush();
     }
 

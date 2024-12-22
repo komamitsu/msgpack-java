@@ -18,25 +18,22 @@ public final class MessagePackReadContext
     /**
      * Parent context for this context; null for root context.
      */
-    protected final MessagePackReadContext _parent;
+    protected final MessagePackReadContext parent;
 
     // // // Optional duplicate detection
 
-    protected final DupDetector _dups;
+    protected final DupDetector dups;
 
     /**
      * For fixed-size Arrays, Objects, this indicates expected number of entries.
      */
-    protected int _expEntryCount;
+    protected int expEntryCount;
 
     // // // Location information (minus source reference)
 
-    protected String _currentName;
+    protected String currentName;
 
-    /**
-     * @since 2.9
-     */
-    protected Object _currentValue;
+    protected Object currentValue;
 
     /*
     /**********************************************************
@@ -44,7 +41,7 @@ public final class MessagePackReadContext
     /**********************************************************
      */
 
-    protected MessagePackReadContext _child = null;
+    protected MessagePackReadContext child = null;
 
     /*
     /**********************************************************
@@ -56,10 +53,10 @@ public final class MessagePackReadContext
                                   int type, int expEntryCount)
     {
         super();
-        _parent = parent;
-        _dups = dups;
+        this.parent = parent;
+        this.dups = dups;
         _type = type;
-        _expEntryCount = expEntryCount;
+        this.expEntryCount = expEntryCount;
         _index = -1;
         _nestingDepth = parent == null ? 0 : parent._nestingDepth + 1;
     }
@@ -67,39 +64,44 @@ public final class MessagePackReadContext
     protected void reset(int type, int expEntryCount)
     {
         _type = type;
-        _expEntryCount = expEntryCount;
+        this.expEntryCount = expEntryCount;
         _index = -1;
-        _currentName = null;
-        _currentValue = null;
-        if (_dups != null) {
-            _dups.reset();
+        currentName = null;
+        currentValue = null;
+        if (dups != null) {
+            dups.reset();
         }
     }
 
     @Override
-    public Object getCurrentValue() {
-        return _currentValue;
+    public Object getCurrentValue()
+    {
+        return currentValue;
     }
 
     @Override
-    public void setCurrentValue(Object v) {
-        _currentValue = v;
+    public void setCurrentValue(Object v)
+    {
+        currentValue = v;
     }
 
     // // // Factory methods
 
-    public static MessagePackReadContext createRootContext(DupDetector dups) {
+    public static MessagePackReadContext createRootContext(DupDetector dups)
+    {
         return new MessagePackReadContext(null, dups, TYPE_ROOT, -1);
     }
 
     public MessagePackReadContext createChildArrayContext(int expEntryCount)
     {
-        MessagePackReadContext ctxt = _child;
+        MessagePackReadContext ctxt = child;
         if (ctxt == null) {
-            _child = ctxt = new MessagePackReadContext(this,
-                    (_dups == null) ? null : _dups.child(),
+            ctxt = new MessagePackReadContext(this,
+                    (dups == null) ? null : dups.child(),
                             TYPE_ARRAY, expEntryCount);
-        } else {
+            child = ctxt;
+        }
+        else {
             ctxt.reset(TYPE_ARRAY, expEntryCount);
         }
         return ctxt;
@@ -107,11 +109,12 @@ public final class MessagePackReadContext
 
     public MessagePackReadContext createChildObjectContext(int expEntryCount)
     {
-        MessagePackReadContext ctxt = _child;
+        MessagePackReadContext ctxt = child;
         if (ctxt == null) {
-            _child = ctxt = new MessagePackReadContext(this,
-                    (_dups == null) ? null : _dups.child(),
+            ctxt = new MessagePackReadContext(this,
+                    (dups == null) ? null : dups.child(),
                     TYPE_OBJECT, expEntryCount);
+            child = ctxt;
             return ctxt;
         }
         ctxt.reset(TYPE_OBJECT, expEntryCount);
@@ -125,10 +128,16 @@ public final class MessagePackReadContext
      */
 
     @Override
-    public String getCurrentName() { return _currentName; }
+    public String getCurrentName()
+    {
+        return currentName;
+    }
 
     @Override
-    public MessagePackReadContext getParent() { return _parent; }
+    public MessagePackReadContext getParent()
+    {
+        return parent;
+    }
 
     /*
     /**********************************************************
@@ -136,19 +145,31 @@ public final class MessagePackReadContext
     /**********************************************************
      */
 
-    public boolean hasExpectedLength() { return (_expEntryCount >= 0); }
-    public int getExpectedLength() { return _expEntryCount; }
-    public boolean isEmpty() { return _expEntryCount == 0; }
+    public boolean hasExpectedLength()
+    {
+        return (expEntryCount >= 0);
+    }
 
-    // @since 2.13
-    public int getRemainingExpectedLength() {
-        int diff = _expEntryCount - _index;
+    public int getExpectedLength()
+    {
+        return expEntryCount;
+    }
+
+    public boolean isEmpty()
+    {
+        return expEntryCount == 0;
+    }
+
+    public int getRemainingExpectedLength()
+    {
+        int diff = expEntryCount - _index;
         // Negative values would occur when expected count is -1
         return Math.max(0, diff);
     }
 
-    public boolean acceptsBreakMarker() {
-        return (_expEntryCount < 0) && _type != TYPE_ROOT;
+    public boolean acceptsBreakMarker()
+    {
+        return (expEntryCount < 0) && _type != TYPE_ROOT;
     }
 
     /**
@@ -160,8 +181,9 @@ public final class MessagePackReadContext
      *<p>
      * Note that since the entry count is updated this is a state-changing method.
      */
-    public boolean expectMoreValues() {
-        if (++_index == _expEntryCount) {
+    public boolean expectMoreValues()
+    {
+        if (++_index == expEntryCount) {
             return false;
         }
         return true;
@@ -172,13 +194,15 @@ public final class MessagePackReadContext
      *   start marker was found
      */
     @Override
-    public JsonLocation startLocation(ContentReference srcRef) {
+    public JsonLocation startLocation(ContentReference srcRef)
+    {
         return new JsonLocation(srcRef, 1L, -1, -1);
     }
 
     @Override
     @Deprecated // since 2.13
-    public JsonLocation getStartLocation(Object rawSrc) {
+    public JsonLocation getStartLocation(Object rawSrc)
+    {
         return startLocation(ContentReference.rawReference(rawSrc));
     }
 
@@ -190,18 +214,17 @@ public final class MessagePackReadContext
 
     public void setCurrentName(String name) throws JsonProcessingException
     {
-        _currentName = name;
-        if (_dups != null) {
-            _checkDup(_dups, name);
+        currentName = name;
+        if (dups != null) {
+            _checkDup(dups, name);
         }
     }
 
     private void _checkDup(DupDetector dd, String name) throws JsonProcessingException
     {
         if (dd.isDup(name)) {
-            // 04-MAy-2016, tatu: Would be great to pass JsonParser, alas, not available so:
             throw new JsonParseException(null,
-                    "Duplicate field '"+name+"'", dd.findLocation());
+                    "Duplicate field '" + name + "'", dd.findLocation());
         }
     }
 
@@ -230,11 +253,12 @@ public final class MessagePackReadContext
             break;
         case TYPE_OBJECT:
             sb.append('{');
-            if (_currentName != null) {
+            if (currentName != null) {
                 sb.append('"');
-                CharTypes.appendQuoted(sb, _currentName);
+                CharTypes.appendQuoted(sb, currentName);
                 sb.append('"');
-            } else {
+            }
+            else {
                 sb.append('?');
             }
             sb.append('}');

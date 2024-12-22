@@ -175,7 +175,8 @@ public class MessagePackFactory
     }
 
     @Override
-    public boolean canHandleBinaryNatively() {
+    public boolean canHandleBinaryNatively()
+    {
         return true;
     }
 }

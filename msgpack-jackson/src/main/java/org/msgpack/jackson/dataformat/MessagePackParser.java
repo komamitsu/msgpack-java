@@ -611,7 +611,8 @@ public class MessagePackParser
         // Unfortunate, but since we did not expose exceptions, need to wrap
         try {
             ctxt.setCurrentName(name);
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             throw new IllegalStateException(e);
         }
     }

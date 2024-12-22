@@ -27,7 +27,6 @@ import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessagePacker;
 import org.msgpack.core.annotations.Nullable;
 import org.msgpack.core.buffer.MessageBufferOutput;
-import org.msgpack.core.buffer.OutputStreamBufferOutput;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -36,7 +35,10 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.util.*;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
 
 public class MessagePackGenerator
         extends GeneratorBase
@@ -50,10 +52,12 @@ public class MessagePackGenerator
     private StackItem rootStackItem;
     private final IOContext ioContext;
 
-    private static class AsciiCharString {
+    private static class AsciiCharString
+    {
         public final byte[] bytes;
 
-        public AsciiCharString(byte[] bytes) {
+        public AsciiCharString(byte[] bytes)
+        {
             this.bytes = bytes;
         }
     }
@@ -144,7 +148,12 @@ public class MessagePackGenerator
         this.stack = new ArrayDeque<>();
     }
 
-    private MessageBufferOutput getMessageBufferOutputForOutputStream(IOContext ctxt, OutputStream out, boolean reuseResourceInGenerator) throws IOException {
+    private MessageBufferOutput getMessageBufferOutputForOutputStream(
+            IOContext ctxt,
+            OutputStream out,
+            boolean reuseResourceInGenerator)
+            throws IOException
+    {
         JacksonBufferOutput messageBufferOutput;
         if (reuseResourceInGenerator) {
             messageBufferOutput = messageBufferOutputHolder.get();
@@ -343,7 +352,8 @@ public class MessagePackGenerator
     }
 
     @Nullable
-    private byte[] getBytesIfAscii(char[] chars, int offset, int len) {
+    private byte[] getBytesIfAscii(char[] chars, int offset, int len)
+    {
         byte[] bytes = new byte[len];
         for (int i = offset; i < offset + len; i++) {
             char c = chars[i];
@@ -355,7 +365,8 @@ public class MessagePackGenerator
         return bytes;
     }
 
-    private boolean areAllAsciiBytes(byte[] bytes, int offset, int len) {
+    private boolean areAllAsciiBytes(byte[] bytes, int offset, int len)
+    {
         for (int i = offset; i < offset + len; i++) {
             if ((bytes[i] & 0x80) != 0) {
                 return false;
@@ -366,7 +377,6 @@ public class MessagePackGenerator
 
     @Override
     public void writeFieldName(String name)
-            throws IOException, JsonGenerationException
     {
         char[] chars = name.toCharArray();
         writeCharArrayTextKey(chars, 0, chars.length);
@@ -374,7 +384,6 @@ public class MessagePackGenerator
 
     @Override
     public void writeFieldName(SerializableString name)
-            throws IOException
     {
         if (name instanceof MessagePackSerializedString) {
             addKeyToStackTop(((MessagePackSerializedString) name).getRawValue());
@@ -389,7 +398,8 @@ public class MessagePackGenerator
         }
     }
 
-    private void writeCharArrayTextKey(char[] text, int offset, int len) throws IOException {
+    private void writeCharArrayTextKey(char[] text, int offset, int len)
+    {
         byte[] bytes = getBytesIfAscii(text, offset, len);
         if (bytes != null) {
             addKeyToStackTop(new AsciiCharString(bytes));
@@ -398,7 +408,8 @@ public class MessagePackGenerator
         addKeyToStackTop(new String(text, offset, len));
     }
 
-    private void writeCharArrayTextValue(char[] text, int offset, int len) throws IOException {
+    private void writeCharArrayTextValue(char[] text, int offset, int len) throws IOException
+    {
         byte[] bytes = getBytesIfAscii(text, offset, len);
         if (bytes != null) {
             addValueToStackTop(new AsciiCharString(bytes));
@@ -407,7 +418,8 @@ public class MessagePackGenerator
         addValueToStackTop(new String(text, offset, len));
     }
 
-    private void writeByteArrayTextValue(byte[] text, int offset, int len) throws IOException {
+    private void writeByteArrayTextValue(byte[] text, int offset, int len) throws IOException
+    {
         if (areAllAsciiBytes(text, offset, len)) {
             addValueToStackTop(new AsciiCharString(text));
         }
@@ -416,7 +428,8 @@ public class MessagePackGenerator
 
     @Override
     public void writeString(String text)
-            throws IOException {
+            throws IOException
+    {
         char[] chars = text.toCharArray();
         writeCharArrayTextValue(chars, 0, chars.length);
     }
@@ -452,7 +465,8 @@ public class MessagePackGenerator
 
     @Override
     public void writeRaw(String text, int offset, int len)
-            throws IOException {
+            throws IOException
+    {
         char[] chars = text.toCharArray();
         writeCharArrayTextValue(chars, offset, len);
     }
@@ -629,7 +643,8 @@ public class MessagePackGenerator
     {
         try {
             messagePacker.close();
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             throw new RuntimeException("Failed to close MessagePacker", e);
         }
     }
