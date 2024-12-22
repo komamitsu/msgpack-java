@@ -48,8 +48,7 @@ public class MessagePackMain {
             "}";
 
     public static void main(String[] args) throws IOException {
-        testMessagePackSer();
-        testMessagePackSer();
+        test();
     }
 
     public static void test() throws IOException {
