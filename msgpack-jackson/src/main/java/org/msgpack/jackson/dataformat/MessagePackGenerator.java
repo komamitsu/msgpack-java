@@ -31,6 +31,7 @@ import org.msgpack.core.buffer.MessageBufferOutput;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -51,6 +52,22 @@ public class MessagePackGenerator
     private Deque<StackItem> stack;
     private StackItem rootStackItem;
     private final IOContext ioContext;
+
+    private static final boolean STRING_VALUE_FIELD_IS_CHARS;
+    private static final boolean STRING_VALUE_FIELD_IS_BYTES;
+    static {
+        boolean stringValueFieldIsChars = false;
+        boolean stringValueFieldIsBytes = false;
+        try {
+            Field stringValueField = String.class.getDeclaredField("value");
+            stringValueFieldIsChars = stringValueField.getType() == char[].class;
+            stringValueFieldIsBytes = stringValueField.getType() == byte[].class;
+        }
+        catch (NoSuchFieldException ignored) {
+        }
+        STRING_VALUE_FIELD_IS_CHARS = stringValueFieldIsChars;
+        STRING_VALUE_FIELD_IS_BYTES = stringValueFieldIsBytes;
+    }
 
     private static class AsciiCharString
     {
@@ -376,24 +393,32 @@ public class MessagePackGenerator
     }
 
     @Override
-    public void writeFieldName(String name)
+    public void writeFieldName(String name) throws IOException
     {
-        char[] chars = name.toCharArray();
-        writeCharArrayTextKey(chars, 0, chars.length);
+        if (STRING_VALUE_FIELD_IS_CHARS) {
+            char[] chars = name.toCharArray();
+            writeCharArrayTextKey(chars, 0, chars.length);
+        }
+        else if (STRING_VALUE_FIELD_IS_BYTES) {
+            byte[] bytes = name.getBytes();
+            writeByteArrayTextKey(bytes, 0, bytes.length);
+        }
+        else {
+            addKeyToStackTop(name);
+        }
+
     }
 
     @Override
-    public void writeFieldName(SerializableString name)
+    public void writeFieldName(SerializableString name) throws IOException
     {
         if (name instanceof MessagePackSerializedString) {
             addKeyToStackTop(((MessagePackSerializedString) name).getRawValue());
         }
         else if (name instanceof SerializedString) {
-            char[] chars = name.getValue().toCharArray();
-            writeCharArrayTextKey(chars, 0, chars.length);
+            writeFieldName(name.getValue());
         }
         else {
-            System.out.println(name.getClass());
             throw new IllegalArgumentException("Unsupported key: " + name);
         }
     }
@@ -422,16 +447,35 @@ public class MessagePackGenerator
     {
         if (areAllAsciiBytes(text, offset, len)) {
             addValueToStackTop(new AsciiCharString(text));
+            return;
         }
         addValueToStackTop(new String(text, offset, len, DEFAULT_CHARSET));
+    }
+
+    private void writeByteArrayTextKey(byte[] text, int offset, int len) throws IOException
+    {
+        if (areAllAsciiBytes(text, offset, len)) {
+            addKeyToStackTop(new AsciiCharString(text));
+            return;
+        }
+        addKeyToStackTop(new String(text, offset, len, DEFAULT_CHARSET));
     }
 
     @Override
     public void writeString(String text)
             throws IOException
     {
-        char[] chars = text.toCharArray();
-        writeCharArrayTextValue(chars, 0, chars.length);
+        if (STRING_VALUE_FIELD_IS_CHARS) {
+            char[] chars = text.toCharArray();
+            writeCharArrayTextValue(chars, 0, chars.length);
+        }
+        else if (STRING_VALUE_FIELD_IS_BYTES) {
+            byte[] bytes = text.getBytes();
+            writeByteArrayTextValue(bytes, 0, bytes.length);
+        }
+        else {
+            addValueToStackTop(text);
+        }
     }
 
     @Override
@@ -459,14 +503,24 @@ public class MessagePackGenerator
     public void writeRaw(String text)
             throws IOException, JsonGenerationException
     {
-        char[] chars = text.toCharArray();
-        writeCharArrayTextValue(chars, 0, chars.length);
+        if (STRING_VALUE_FIELD_IS_CHARS) {
+            char[] chars = text.toCharArray();
+            writeCharArrayTextValue(chars, 0, chars.length);
+        }
+        else if (STRING_VALUE_FIELD_IS_BYTES) {
+            byte[] bytes = text.getBytes();
+            writeByteArrayTextValue(bytes, 0, bytes.length);
+        }
+        else {
+            addValueToStackTop(text);
+        }
     }
 
     @Override
     public void writeRaw(String text, int offset, int len)
             throws IOException
     {
+        // TODO: There is room to optimize this.
         char[] chars = text.toCharArray();
         writeCharArrayTextValue(chars, offset, len);
     }
@@ -695,6 +749,7 @@ public class MessagePackGenerator
     {
         if (stack.isEmpty()) {
             pack(value);
+            // TODO: Is this needed?
             flushMessagePacker();
         }
         else {
