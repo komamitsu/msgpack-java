@@ -749,7 +749,6 @@ public class MessagePackGenerator
     {
         if (stack.isEmpty()) {
             pack(value);
-            // TODO: Is this needed?
             flushMessagePacker();
         }
         else {
