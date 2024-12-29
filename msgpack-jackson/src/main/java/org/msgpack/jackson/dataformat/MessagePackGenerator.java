@@ -20,13 +20,13 @@ import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.ObjectCodec;
 import com.fasterxml.jackson.core.SerializableString;
 import com.fasterxml.jackson.core.base.GeneratorBase;
-import com.fasterxml.jackson.core.io.IOContext;
 import com.fasterxml.jackson.core.io.SerializedString;
 import com.fasterxml.jackson.core.json.JsonWriteContext;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessagePacker;
 import org.msgpack.core.annotations.Nullable;
 import org.msgpack.core.buffer.MessageBufferOutput;
+import org.msgpack.core.buffer.OutputStreamBufferOutput;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -46,12 +46,11 @@ public class MessagePackGenerator
 {
     private static final Charset DEFAULT_CHARSET = Charset.forName("UTF-8");
     private final MessagePacker messagePacker;
-    private static ThreadLocal<JacksonBufferOutput> messageBufferOutputHolder = new ThreadLocal<>();
+    private static ThreadLocal<OutputStreamBufferOutput> messageBufferOutputHolder = new ThreadLocal<>();
     private final OutputStream output;
     private final MessagePack.PackerConfig packerConfig;
     private Deque<StackItem> stack;
     private StackItem rootStackItem;
-    private final IOContext ioContext;
 
     private static final boolean STRING_VALUE_FIELD_IS_CHARS;
     private static final boolean STRING_VALUE_FIELD_IS_BYTES;
@@ -134,14 +133,12 @@ public class MessagePackGenerator
 
     // This is an internal constructor for nested serialization.
     private MessagePackGenerator(
-            IOContext ctxt,
             int features,
             ObjectCodec codec,
             OutputStream out,
             MessagePack.PackerConfig packerConfig)
     {
         super(features, codec);
-        this.ioContext = ctxt;
         this.output = out;
         this.messagePacker = packerConfig.newPacker(out);
         this.packerConfig = packerConfig;
@@ -149,7 +146,6 @@ public class MessagePackGenerator
     }
 
     public MessagePackGenerator(
-            IOContext ctxt,
             int features,
             ObjectCodec codec,
             OutputStream out,
@@ -158,32 +154,30 @@ public class MessagePackGenerator
             throws IOException
     {
         super(features, codec);
-        this.ioContext = ctxt;
         this.output = out;
-        this.messagePacker = packerConfig.newPacker(getMessageBufferOutputForOutputStream(ctxt, out, reuseResourceInGenerator));
+        this.messagePacker = packerConfig.newPacker(getMessageBufferOutputForOutputStream(out, reuseResourceInGenerator));
         this.packerConfig = packerConfig;
         this.stack = new ArrayDeque<>();
     }
 
     private MessageBufferOutput getMessageBufferOutputForOutputStream(
-            IOContext ctxt,
             OutputStream out,
             boolean reuseResourceInGenerator)
             throws IOException
     {
-        JacksonBufferOutput messageBufferOutput;
+        OutputStreamBufferOutput messageBufferOutput;
         if (reuseResourceInGenerator) {
             messageBufferOutput = messageBufferOutputHolder.get();
             if (messageBufferOutput == null) {
-                messageBufferOutput = new JacksonBufferOutput(out, ctxt);
+                messageBufferOutput = new OutputStreamBufferOutput(out);
                 messageBufferOutputHolder.set(messageBufferOutput);
             }
             else {
-                messageBufferOutput.reset(out, ctxt);
+                messageBufferOutput.reset(out);
             }
         }
         else {
-            messageBufferOutput = new JacksonBufferOutput(out, ctxt);
+            messageBufferOutput = new OutputStreamBufferOutput(out);
         }
         return messageBufferOutput;
     }
@@ -306,7 +300,7 @@ public class MessagePackGenerator
         else {
             messagePacker.flush();
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            MessagePackGenerator messagePackGenerator = new MessagePackGenerator(ioContext, getFeatureMask(), getCodec(), outputStream, packerConfig);
+            MessagePackGenerator messagePackGenerator = new MessagePackGenerator(getFeatureMask(), getCodec(), outputStream, packerConfig);
             getCodec().writeValue(messagePackGenerator, v);
             output.write(outputStream.toByteArray());
         }

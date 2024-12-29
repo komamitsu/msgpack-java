@@ -85,8 +85,7 @@ public class MessagePackFactory
     public JsonGenerator createGenerator(OutputStream out, JsonEncoding enc)
             throws IOException
     {
-        IOContext ctxt = _createContext(_createContentReference(out), false);
-        return new MessagePackGenerator(ctxt, _generatorFeatures, _objectCodec, out, packerConfig, reuseResourceInGenerator);
+        return new MessagePackGenerator(_generatorFeatures, _objectCodec, out, packerConfig, reuseResourceInGenerator);
     }
 
     @Override
