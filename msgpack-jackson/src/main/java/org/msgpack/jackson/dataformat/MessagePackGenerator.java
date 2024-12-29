@@ -80,7 +80,8 @@ public class MessagePackGenerator
     private static final byte CONTAINER_OBJECT = 1;
     private static final byte CONTAINER_ARRAY = 2;
 
-    private static final class Element {
+    private static final class Element
+    {
         // Root containers have -1.
         final int parentIndex;
         final byte containerType;
@@ -89,7 +90,8 @@ public class MessagePackGenerator
         // Only for non-containers.
         @Nullable Object data;
 
-        public Element(int parentIndex, byte containerType) {
+        public Element(int parentIndex, byte containerType)
+        {
             this.parentIndex = parentIndex;
             this.containerType = containerType;
         }
@@ -323,20 +325,23 @@ public class MessagePackGenerator
         return true;
     }
 
-    private void addContainerElement(Object data) {
+    private void addContainerElement(Object data)
+    {
         Element element = new Element(currentParentElementIndex, NON_CONTAINER);
         element.data = data;
         elements.add(element);
     }
 
-    private void addElementKey(Object key) {
+    private void addElementKey(Object key)
+    {
         if (!_writeContext.inObject()) {
             throw new IllegalStateException();
         }
         addContainerElement(key);
     }
 
-    private void addElementValue(Object value) throws IOException {
+    private void addElementValue(Object value) throws IOException
+    {
         if (_writeContext.inObject() || _writeContext.inArray()) {
             addContainerElement(value);
         }
