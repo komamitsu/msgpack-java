@@ -47,7 +47,8 @@ public class TimestampExtensionModule
                 byte[] bytes = unpacker.readPayload(header.getLength());
 
                 MessagePackExtensionType extensionType = new MessagePackExtensionType(EXT_TYPE, bytes);
-                gen.writeObject(extensionType);
+                assert gen instanceof MessagePackGenerator;
+                ((MessagePackGenerator) gen).writeExtensionType(extensionType);
             }
         }
     }

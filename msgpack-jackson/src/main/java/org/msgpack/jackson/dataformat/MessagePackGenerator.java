@@ -636,14 +636,6 @@ public class MessagePackGenerator
     public void close()
             throws IOException
     {
-        // Just in case.
-        if (_writeContext.inObject()) {
-            writeEndObject();
-        }
-        else if (_writeContext.inArray()) {
-            writeEndArray();
-        }
-
         try {
             flush();
         }
