@@ -210,11 +210,14 @@ public class MessagePackGenerator
             throws IOException
     {
         MessagePacker messagePacker = getMessagePacker();
-        if (v == null) {
-            messagePacker.packNil();
+        if (v instanceof String) {
+            messagePacker.packString((String) v);
         }
         else if (v instanceof Integer) {
             messagePacker.packInt((Integer) v);
+        }
+        else if (v == null) {
+            messagePacker.packNil();
         }
         else if (v instanceof ByteBuffer) {
             ByteBuffer bb = (ByteBuffer) v;
@@ -237,9 +240,6 @@ public class MessagePackGenerator
             messagePacker.writePayload(bytes);
         }
          */
-        else if (v instanceof String) {
-            messagePacker.packString((String) v);
-        }
         else if (v instanceof Float) {
             messagePacker.packFloat((Float) v);
         }
