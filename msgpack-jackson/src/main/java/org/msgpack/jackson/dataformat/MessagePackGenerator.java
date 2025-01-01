@@ -230,11 +230,13 @@ public class MessagePackGenerator
                 messagePacker.addPayload(data);
             }
         }
+        /*
         else if (v instanceof AsciiCharString) {
             byte[] bytes = ((AsciiCharString) v).bytes;
             messagePacker.packRawStringHeader(bytes.length);
             messagePacker.writePayload(bytes);
         }
+         */
         else if (v instanceof String) {
             messagePacker.packString((String) v);
         }
