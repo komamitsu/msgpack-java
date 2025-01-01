@@ -52,28 +52,6 @@ public class MessagePackGenerator
     private final List<Element> elements;
     private boolean isElementsClosed = false;
 
-    private static final boolean STRING_VALUE_FIELD_IS_CHARS;
-    static {
-        boolean stringValueFieldIsChars = false;
-        try {
-            Field stringValueField = String.class.getDeclaredField("value");
-            stringValueFieldIsChars = stringValueField.getType() == char[].class;
-        }
-        catch (NoSuchFieldException ignored) {
-        }
-        STRING_VALUE_FIELD_IS_CHARS = stringValueFieldIsChars;
-    }
-
-    private static class AsciiCharString
-    {
-        public final byte[] bytes;
-
-        public AsciiCharString(byte[] bytes)
-        {
-            this.bytes = bytes;
-        }
-    }
-
     private static final byte NON_CONTAINER = 0;
     private static final byte CONTAINER_OBJECT = 1;
     private static final byte CONTAINER_ARRAY = 2;
@@ -233,13 +211,6 @@ public class MessagePackGenerator
                 messagePacker.addPayload(data);
             }
         }
-        /*
-        else if (v instanceof AsciiCharString) {
-            byte[] bytes = ((AsciiCharString) v).bytes;
-            messagePacker.packRawStringHeader(bytes.length);
-            messagePacker.writePayload(bytes);
-        }
-         */
         else if (v instanceof Float) {
             messagePacker.packFloat((Float) v);
         }
@@ -315,30 +286,6 @@ public class MessagePackGenerator
         messagePacker.packArrayHeader(container.childCount);
     }
 
-    @Nullable
-    private byte[] getBytesIfAscii(char[] chars, int offset, int len)
-    {
-        byte[] bytes = new byte[len];
-        for (int i = offset; i < offset + len; i++) {
-            char c = chars[i];
-            if (c >= 0x80) {
-                return null;
-            }
-            bytes[i] = (byte) c;
-        }
-        return bytes;
-    }
-
-    private boolean areAllAsciiBytes(byte[] bytes, int offset, int len)
-    {
-        for (int i = offset; i < offset + len; i++) {
-            if ((bytes[i] & 0x80) != 0) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     private void addContainerElement(Object data)
     {
         Element element = new Element(currentParentElementIndex, NON_CONTAINER);
@@ -387,25 +334,6 @@ public class MessagePackGenerator
         }
     }
 
-    private void writeCharArrayTextValue(char[] text, int offset, int len) throws IOException
-    {
-        byte[] bytes = getBytesIfAscii(text, offset, len);
-        if (bytes != null) {
-            addValueToStackTop(new AsciiCharString(bytes));
-            return;
-        }
-        addValueToStackTop(new String(text, offset, len));
-    }
-
-    private void writeByteArrayTextValue(byte[] text, int offset, int len) throws IOException
-    {
-        if (areAllAsciiBytes(text, offset, len)) {
-            addValueToStackTop(new AsciiCharString(text));
-            return;
-        }
-        addValueToStackTop(new String(text, offset, len, DEFAULT_CHARSET));
-    }
-
     @Override
     public void writeString(String text)
             throws IOException
@@ -421,8 +349,6 @@ public class MessagePackGenerator
         if (true) {
             throw new RuntimeException();
         }
-//        writeCharArrayTextValue(text, offset, len);
-//        _writeContext.writeValue();
     }
 
     @Override
@@ -432,8 +358,6 @@ public class MessagePackGenerator
         if (true) {
             throw new RuntimeException();
         }
-//        writeByteArrayTextValue(text, offset, length);
-//        _writeContext.writeValue();
     }
 
     @Override
@@ -443,8 +367,6 @@ public class MessagePackGenerator
         if (true) {
             throw new RuntimeException();
         }
-//        writeByteArrayTextValue(text, offset, length);
-//        _writeContext.writeValue();
     }
 
     @Override
@@ -454,8 +376,6 @@ public class MessagePackGenerator
         if (true) {
             throw new RuntimeException();
         }
-//        addValueToStackTop(text);
-//        _writeContext.writeValue();
     }
 
     @Override
@@ -465,10 +385,6 @@ public class MessagePackGenerator
         if (true) {
             throw new RuntimeException();
         }
-        // TODO: There is room to optimize this.
-//        char[] chars = text.toCharArray();
-//        writeCharArrayTextValue(chars, offset, len);
-//        _writeContext.writeValue();
     }
 
     @Override
@@ -478,8 +394,6 @@ public class MessagePackGenerator
         if (true) {
             throw new RuntimeException();
         }
-//        writeCharArrayTextValue(text, offset, len);
-//        _writeContext.writeValue();
     }
 
     @Override
@@ -489,8 +403,6 @@ public class MessagePackGenerator
         if (true) {
             throw new RuntimeException();
         }
-//        writeCharArrayTextValue(new char[] { c }, 0, 1);
-//        _writeContext.writeValue();
     }
 
     @Override
@@ -500,8 +412,6 @@ public class MessagePackGenerator
         if (true) {
             throw new RuntimeException();
         }
-//        addValueToStackTop(ByteBuffer.wrap(data, offset, len));
-//        _writeContext.writeValue();
     }
 
     @Override
