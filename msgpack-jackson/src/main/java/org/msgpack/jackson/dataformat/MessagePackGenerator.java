@@ -539,7 +539,6 @@ public class MessagePackGenerator
             flush();
         }
         finally {
-            super.close();
             if (isEnabled(Feature.AUTO_CLOSE_TARGET)) {
                 MessagePacker messagePacker = getMessagePacker();
                 messagePacker.close();
