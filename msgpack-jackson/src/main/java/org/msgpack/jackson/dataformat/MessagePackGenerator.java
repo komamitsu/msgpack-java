@@ -344,7 +344,7 @@ public class MessagePackGenerator
         elements.add(element);
     }
 
-    private void addElementKey(Object key)
+    private void addKeyToStackTop(Object key)
     {
         if (!_writeContext.inObject()) {
             throw new IllegalStateException();
@@ -352,7 +352,7 @@ public class MessagePackGenerator
         addContainerElement(key);
     }
 
-    private void addElementValue(Object value) throws IOException
+    private void addValueToStackTop(Object value) throws IOException
     {
         if (_writeContext.inObject() || _writeContext.inArray()) {
             addContainerElement(value);
@@ -366,13 +366,7 @@ public class MessagePackGenerator
     @Override
     public void writeFieldName(String name) throws IOException
     {
-        if (STRING_VALUE_FIELD_IS_CHARS) {
-            char[] chars = name.toCharArray();
-            writeCharArrayTextKey(chars, 0, chars.length);
-        }
-        else {
-            addElementKey(name);
-        }
+        addKeyToStackTop(name);
         _writeContext.writeFieldName(name);
     }
 
@@ -380,7 +374,7 @@ public class MessagePackGenerator
     public void writeFieldName(SerializableString name) throws IOException
     {
         if (name instanceof MessagePackSerializedString) {
-            addElementKey(((MessagePackSerializedString) name).getRawValue());
+            addKeyToStackTop(((MessagePackSerializedString) name).getRawValue());
             _writeContext.writeFieldName(name.getValue());
         }
         else if (name instanceof SerializedString) {
@@ -391,46 +385,30 @@ public class MessagePackGenerator
         }
     }
 
-    private void writeCharArrayTextKey(char[] text, int offset, int len)
-    {
-        byte[] bytes = getBytesIfAscii(text, offset, len);
-        if (bytes != null) {
-            addElementKey(new AsciiCharString(bytes));
-            return;
-        }
-        addElementKey(new String(text, offset, len));
-    }
-
     private void writeCharArrayTextValue(char[] text, int offset, int len) throws IOException
     {
         byte[] bytes = getBytesIfAscii(text, offset, len);
         if (bytes != null) {
-            addElementValue(new AsciiCharString(bytes));
+            addValueToStackTop(new AsciiCharString(bytes));
             return;
         }
-        addElementValue(new String(text, offset, len));
+        addValueToStackTop(new String(text, offset, len));
     }
 
     private void writeByteArrayTextValue(byte[] text, int offset, int len) throws IOException
     {
         if (areAllAsciiBytes(text, offset, len)) {
-            addElementValue(new AsciiCharString(text));
+            addValueToStackTop(new AsciiCharString(text));
             return;
         }
-        addElementValue(new String(text, offset, len, DEFAULT_CHARSET));
+        addValueToStackTop(new String(text, offset, len, DEFAULT_CHARSET));
     }
 
     @Override
     public void writeString(String text)
             throws IOException
     {
-        if (STRING_VALUE_FIELD_IS_CHARS) {
-            char[] chars = text.toCharArray();
-            writeCharArrayTextValue(chars, 0, chars.length);
-        }
-        else {
-            addElementValue(text);
-        }
+        addValueToStackTop(text);
         _writeContext.writeValue();
     }
 
@@ -438,79 +416,97 @@ public class MessagePackGenerator
     public void writeString(char[] text, int offset, int len)
             throws IOException
     {
-        writeCharArrayTextValue(text, offset, len);
-        _writeContext.writeValue();
+        if (true) {
+            throw new RuntimeException();
+        }
+//        writeCharArrayTextValue(text, offset, len);
+//        _writeContext.writeValue();
     }
 
     @Override
     public void writeRawUTF8String(byte[] text, int offset, int length)
             throws IOException
     {
-        writeByteArrayTextValue(text, offset, length);
-        _writeContext.writeValue();
+        if (true) {
+            throw new RuntimeException();
+        }
+//        writeByteArrayTextValue(text, offset, length);
+//        _writeContext.writeValue();
     }
 
     @Override
     public void writeUTF8String(byte[] text, int offset, int length)
             throws IOException
     {
-        writeByteArrayTextValue(text, offset, length);
-        _writeContext.writeValue();
+        if (true) {
+            throw new RuntimeException();
+        }
+//        writeByteArrayTextValue(text, offset, length);
+//        _writeContext.writeValue();
     }
 
     @Override
     public void writeRaw(String text)
             throws IOException
     {
-        if (STRING_VALUE_FIELD_IS_CHARS) {
-            char[] chars = text.toCharArray();
-            writeCharArrayTextValue(chars, 0, chars.length);
+        if (true) {
+            throw new RuntimeException();
         }
-        else {
-            addElementValue(text);
-        }
-        _writeContext.writeValue();
+//        addValueToStackTop(text);
+//        _writeContext.writeValue();
     }
 
     @Override
     public void writeRaw(String text, int offset, int len)
             throws IOException
     {
+        if (true) {
+            throw new RuntimeException();
+        }
         // TODO: There is room to optimize this.
-        char[] chars = text.toCharArray();
-        writeCharArrayTextValue(chars, offset, len);
-        _writeContext.writeValue();
+//        char[] chars = text.toCharArray();
+//        writeCharArrayTextValue(chars, offset, len);
+//        _writeContext.writeValue();
     }
 
     @Override
     public void writeRaw(char[] text, int offset, int len)
             throws IOException
     {
-        writeCharArrayTextValue(text, offset, len);
-        _writeContext.writeValue();
+        if (true) {
+            throw new RuntimeException();
+        }
+//        writeCharArrayTextValue(text, offset, len);
+//        _writeContext.writeValue();
     }
 
     @Override
     public void writeRaw(char c)
             throws IOException
     {
-        writeCharArrayTextValue(new char[] { c }, 0, 1);
-        _writeContext.writeValue();
+        if (true) {
+            throw new RuntimeException();
+        }
+//        writeCharArrayTextValue(new char[] { c }, 0, 1);
+//        _writeContext.writeValue();
     }
 
     @Override
     public void writeBinary(Base64Variant b64variant, byte[] data, int offset, int len)
             throws IOException
     {
-        addElementValue(ByteBuffer.wrap(data, offset, len));
-        _writeContext.writeValue();
+        if (true) {
+            throw new RuntimeException();
+        }
+//        addValueToStackTop(ByteBuffer.wrap(data, offset, len));
+//        _writeContext.writeValue();
     }
 
     @Override
     public void writeNumber(int v)
             throws IOException
     {
-        addElementValue(v);
+        addValueToStackTop(v);
         _writeContext.writeValue();
     }
 
@@ -518,7 +514,7 @@ public class MessagePackGenerator
     public void writeNumber(long v)
             throws IOException
     {
-        addElementValue(v);
+        addValueToStackTop(v);
         _writeContext.writeValue();
     }
 
@@ -526,7 +522,7 @@ public class MessagePackGenerator
     public void writeNumber(BigInteger v)
             throws IOException
     {
-        addElementValue(v);
+        addValueToStackTop(v);
         _writeContext.writeValue();
     }
 
@@ -534,7 +530,7 @@ public class MessagePackGenerator
     public void writeNumber(double d)
             throws IOException
     {
-        addElementValue(d);
+        addValueToStackTop(d);
         _writeContext.writeValue();
     }
 
@@ -542,7 +538,7 @@ public class MessagePackGenerator
     public void writeNumber(float f)
             throws IOException
     {
-        addElementValue(f);
+        addValueToStackTop(f);
         _writeContext.writeValue();
     }
 
@@ -550,7 +546,7 @@ public class MessagePackGenerator
     public void writeNumber(BigDecimal dec)
             throws IOException
     {
-        addElementValue(dec);
+        addValueToStackTop(dec);
         _writeContext.writeValue();
     }
 
@@ -563,7 +559,7 @@ public class MessagePackGenerator
         // proper numeric types not String, it's better to use the other APIs instead.
         try {
             long l = Long.parseLong(encodedValue);
-            addElementValue(l);
+            addValueToStackTop(l);
             _writeContext.writeValue();
             return;
         }
@@ -572,7 +568,7 @@ public class MessagePackGenerator
 
         try {
             double d = Double.parseDouble(encodedValue);
-            addElementValue(d);
+            addValueToStackTop(d);
             _writeContext.writeValue();
             return;
         }
@@ -581,7 +577,7 @@ public class MessagePackGenerator
 
         try {
             BigInteger bi = new BigInteger(encodedValue);
-            addElementValue(bi);
+            addValueToStackTop(bi);
             _writeContext.writeValue();
             return;
         }
@@ -590,7 +586,7 @@ public class MessagePackGenerator
 
         try {
             BigDecimal bc = new BigDecimal(encodedValue);
-            addElementValue(bc);
+            addValueToStackTop(bc);
             _writeContext.writeValue();
             return;
         }
@@ -604,7 +600,7 @@ public class MessagePackGenerator
     public void writeBoolean(boolean state)
             throws IOException
     {
-        addElementValue(state);
+        addValueToStackTop(state);
         _writeContext.writeValue();
     }
 
@@ -612,14 +608,14 @@ public class MessagePackGenerator
     public void writeNull()
             throws IOException
     {
-        addElementValue(null);
+        addValueToStackTop(null);
         _writeContext.writeValue();
     }
 
     public void writeExtensionType(MessagePackExtensionType extensionType)
             throws IOException
     {
-        addElementValue(extensionType);
+        addValueToStackTop(extensionType);
         _writeContext.writeValue();
     }
 
