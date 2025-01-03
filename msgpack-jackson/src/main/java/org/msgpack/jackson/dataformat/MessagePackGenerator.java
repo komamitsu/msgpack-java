@@ -37,6 +37,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 public class MessagePackGenerator
         extends GeneratorBase
@@ -55,7 +56,7 @@ public class MessagePackGenerator
     private final List<Node> nodes;
     private boolean isElementsClosed = false;
 
-    private static final boolean STRING_VALUE_FIELD_IS_CHARS;
+    private static final Supplier<Boolean> STRING_VALUE_FIELD_IS_CHARS;
     static {
         boolean stringValueFieldIsChars = false;
         try {
@@ -64,7 +65,12 @@ public class MessagePackGenerator
         }
         catch (NoSuchFieldException ignored) {
         }
-        STRING_VALUE_FIELD_IS_CHARS = stringValueFieldIsChars;
+        if (stringValueFieldIsChars) {
+            STRING_VALUE_FIELD_IS_CHARS = () -> true;
+        }
+        else {
+            STRING_VALUE_FIELD_IS_CHARS = () -> false;
+        }
     }
 
     private static class AsciiCharString
@@ -463,7 +469,7 @@ public class MessagePackGenerator
     @Override
     public void writeFieldName(String name) throws IOException
     {
-        if (STRING_VALUE_FIELD_IS_CHARS) {
+        if (STRING_VALUE_FIELD_IS_CHARS.get()) {
             char[] chars = name.toCharArray();
             writeCharArrayTextKey(chars, 0, chars.length);
         }
@@ -490,7 +496,7 @@ public class MessagePackGenerator
     public void writeString(String text)
             throws IOException
     {
-        if (STRING_VALUE_FIELD_IS_CHARS) {
+        if (STRING_VALUE_FIELD_IS_CHARS.get()) {
             char[] chars = text.toCharArray();
             writeCharArrayTextValue(chars, 0, chars.length);
         }
@@ -524,7 +530,7 @@ public class MessagePackGenerator
     public void writeRaw(String text)
             throws IOException
     {
-        if (STRING_VALUE_FIELD_IS_CHARS) {
+        if (STRING_VALUE_FIELD_IS_CHARS.get()) {
             char[] chars = text.toCharArray();
             writeCharArrayTextValue(chars, 0, chars.length);
         }
