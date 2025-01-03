@@ -20,7 +20,6 @@ import com.fasterxml.jackson.core.ObjectCodec;
 import com.fasterxml.jackson.core.SerializableString;
 import com.fasterxml.jackson.core.base.GeneratorBase;
 import com.fasterxml.jackson.core.io.SerializedString;
-import com.fasterxml.jackson.core.json.JsonWriteContext;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessagePacker;
 import org.msgpack.core.buffer.MessageBufferOutput;
@@ -38,12 +37,16 @@ import java.util.List;
 public class MessagePackGenerator
         extends GeneratorBase
 {
+    private static final int IN_ROOT = 0;
+    private static final int IN_OBJECT = 1;
+    private static final int IN_ARRAY = 2;
     private final MessagePacker messagePacker;
     private static final ThreadLocal<OutputStreamBufferOutput> messageBufferOutputHolder = new ThreadLocal<>();
     private final OutputStream output;
     private final MessagePack.PackerConfig packerConfig;
 
     private int currentParentElementIndex = -1;
+    private int currentState;
     private final List<Node> nodes;
     private boolean isElementsClosed = false;
 
@@ -160,20 +163,32 @@ public class MessagePackGenerator
         return messageBufferOutput;
     }
 
+    private String currentStateStr()
+    {
+        switch (currentState) {
+            case IN_OBJECT:
+                return "IN_OBJECT";
+            case IN_ARRAY:
+                return "IN_ARRAY";
+            default:
+                return "IN_ROOT";
+        }
+    }
+
     @Override
     public void writeStartArray()
     {
-        _writeContext = _writeContext.createChildArrayContext();
         nodes.add(new NodeArray(currentParentElementIndex));
         currentParentElementIndex = nodes.size() - 1;
+        currentState = IN_ARRAY;
     }
 
     @Override
     public void writeEndArray()
             throws IOException
     {
-        if (!_writeContext.inArray()) {
-            _reportError("Current context not an array but " + _writeContext.getTypeDesc());
+        if (currentState != IN_ARRAY) {
+            _reportError("Current context not an array but " + currentStateStr());
         }
         endCurrentContainer();
     }
@@ -181,17 +196,17 @@ public class MessagePackGenerator
     @Override
     public void writeStartObject()
     {
-        _writeContext = _writeContext.createChildObjectContext();
         nodes.add(new NodeObject(currentParentElementIndex));
         currentParentElementIndex = nodes.size() - 1;
+        currentState = IN_OBJECT;
     }
 
     @Override
     public void writeEndObject()
             throws IOException
     {
-        if (!_writeContext.inObject()) {
-            _reportError("Current context not an object but " + _writeContext.getTypeDesc());
+        if (currentState != IN_OBJECT) {
+            _reportError("Current context not an object but " + currentStateStr());
         }
         endCurrentContainer();
     }
@@ -201,13 +216,24 @@ public class MessagePackGenerator
         Node parent = nodes.get(currentParentElementIndex);
         assert parent instanceof NodeContainer;
         NodeContainer parentContainer = (NodeContainer) parent;
-        parentContainer.childCount = _writeContext.getEntryCount();
+        parentContainer.childCount = nodes.size() - 1 - currentParentElementIndex;
         if (currentParentElementIndex == 0) {
             isElementsClosed = true;
+            currentParentElementIndex = parent.parentIndex;
+            return;
         }
+
         currentParentElementIndex = parent.parentIndex;
-        _writeContext = _writeContext.getParent();
-        _writeContext.writeValue();
+        Node currentParent = nodes.get(currentParentElementIndex);
+        if (currentParent instanceof NodeObject) {
+            currentState = IN_OBJECT;
+        }
+        else if (currentParent instanceof NodeArray) {
+            currentState = IN_ARRAY;
+        }
+        else {
+            throw new IllegalStateException();
+        }
     }
 
     private void pack(Object v)
@@ -314,7 +340,7 @@ public class MessagePackGenerator
 
     private void addKeyToStackTop(Object key)
     {
-        if (!_writeContext.inObject()) {
+        if (currentState != IN_OBJECT) {
             throw new IllegalStateException();
         }
         Node node = new NodeEntryInObject(currentParentElementIndex, key);
@@ -323,19 +349,23 @@ public class MessagePackGenerator
 
     private void addValueToStackTop(Object value) throws IOException
     {
-        if (_writeContext.inObject()) {
-            Node node = nodes.get(nodes.size() - 1);
-            assert node instanceof NodeEntryInObject;
-            NodeEntryInObject nodeEntryInObject = (NodeEntryInObject) node;
-            nodeEntryInObject.value = value;
-        }
-        else if (_writeContext.inArray()) {
-            Node node = new NodeEntryInArray(currentParentElementIndex, value);
-            nodes.add(node);
-        }
-        else {
-            pack(value);
-            flushMessagePacker();
+        switch (currentState) {
+            case IN_OBJECT: {
+                Node node = nodes.get(nodes.size() - 1);
+                assert node instanceof NodeEntryInObject;
+                NodeEntryInObject nodeEntryInObject = (NodeEntryInObject) node;
+                nodeEntryInObject.value = value;
+                break;
+            }
+            case IN_ARRAY: {
+                Node node = new NodeEntryInArray(currentParentElementIndex, value);
+                nodes.add(node);
+                break;
+            }
+            default:
+                pack(value);
+                flushMessagePacker();
+                break;
         }
     }
 
@@ -343,7 +373,6 @@ public class MessagePackGenerator
     public void writeFieldName(String name) throws IOException
     {
         addKeyToStackTop(name);
-        _writeContext.writeFieldName(name);
     }
 
     @Override
@@ -351,7 +380,6 @@ public class MessagePackGenerator
     {
         if (name instanceof MessagePackSerializedString) {
             addKeyToStackTop(((MessagePackSerializedString) name).getRawValue());
-            _writeContext.writeFieldName(name.getValue());
         }
         else if (name instanceof SerializedString) {
             writeFieldName(name.getValue());
@@ -366,7 +394,6 @@ public class MessagePackGenerator
             throws IOException
     {
         addValueToStackTop(text);
-        _writeContext.writeValue();
     }
 
     @Override
@@ -446,7 +473,6 @@ public class MessagePackGenerator
             throws IOException
     {
         addValueToStackTop(v);
-        _writeContext.writeValue();
     }
 
     @Override
@@ -454,7 +480,6 @@ public class MessagePackGenerator
             throws IOException
     {
         addValueToStackTop(v);
-        _writeContext.writeValue();
     }
 
     @Override
@@ -462,7 +487,6 @@ public class MessagePackGenerator
             throws IOException
     {
         addValueToStackTop(v);
-        _writeContext.writeValue();
     }
 
     @Override
@@ -470,7 +494,6 @@ public class MessagePackGenerator
             throws IOException
     {
         addValueToStackTop(d);
-        _writeContext.writeValue();
     }
 
     @Override
@@ -478,7 +501,6 @@ public class MessagePackGenerator
             throws IOException
     {
         addValueToStackTop(f);
-        _writeContext.writeValue();
     }
 
     @Override
@@ -486,7 +508,6 @@ public class MessagePackGenerator
             throws IOException
     {
         addValueToStackTop(dec);
-        _writeContext.writeValue();
     }
 
     @Override
@@ -499,7 +520,6 @@ public class MessagePackGenerator
         try {
             long l = Long.parseLong(encodedValue);
             addValueToStackTop(l);
-            _writeContext.writeValue();
             return;
         }
         catch (NumberFormatException ignored) {
@@ -508,7 +528,6 @@ public class MessagePackGenerator
         try {
             double d = Double.parseDouble(encodedValue);
             addValueToStackTop(d);
-            _writeContext.writeValue();
             return;
         }
         catch (NumberFormatException ignored) {
@@ -517,7 +536,6 @@ public class MessagePackGenerator
         try {
             BigInteger bi = new BigInteger(encodedValue);
             addValueToStackTop(bi);
-            _writeContext.writeValue();
             return;
         }
         catch (NumberFormatException ignored) {
@@ -526,7 +544,6 @@ public class MessagePackGenerator
         try {
             BigDecimal bc = new BigDecimal(encodedValue);
             addValueToStackTop(bc);
-            _writeContext.writeValue();
             return;
         }
         catch (NumberFormatException ignored) {
@@ -540,7 +557,6 @@ public class MessagePackGenerator
             throws IOException
     {
         addValueToStackTop(state);
-        _writeContext.writeValue();
     }
 
     @Override
@@ -548,14 +564,12 @@ public class MessagePackGenerator
             throws IOException
     {
         addValueToStackTop(null);
-        _writeContext.writeValue();
     }
 
     public void writeExtensionType(MessagePackExtensionType extensionType)
             throws IOException
     {
         addValueToStackTop(extensionType);
-        _writeContext.writeValue();
     }
 
     @Override
@@ -626,13 +640,9 @@ public class MessagePackGenerator
     }
 
     @Override
-    protected void _verifyValueWrite(String typeMsg)
-            throws IOException
+    protected void _verifyValueWrite(String typeMsg) throws IOException
     {
-        int status = _writeContext.writeValue();
-        if (status == JsonWriteContext.STATUS_EXPECT_NAME) {
-            _reportError("Can not " + typeMsg + ", expecting field name");
-        }
+        // FIXME
     }
 
     private MessagePacker getMessagePacker()
