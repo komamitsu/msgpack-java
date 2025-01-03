@@ -211,7 +211,15 @@ public class MessagePackGenerator
     @Override
     public void writeStartArray()
     {
-        nodes.add(new NodeArray(currentParentElementIndex));
+        if (currentState == IN_OBJECT) {
+            Node node = nodes.get(nodes.size() - 1);
+            assert node instanceof NodeEntryInObject;
+            NodeEntryInObject nodeEntryInObject = (NodeEntryInObject) node;
+            nodeEntryInObject.value = new NodeArray(currentParentElementIndex);
+        }
+        else {
+            nodes.add(new NodeArray(currentParentElementIndex));
+        }
         currentParentElementIndex = nodes.size() - 1;
         currentState = IN_ARRAY;
     }
@@ -229,7 +237,15 @@ public class MessagePackGenerator
     @Override
     public void writeStartObject()
     {
-        nodes.add(new NodeObject(currentParentElementIndex));
+        if (currentState == IN_OBJECT) {
+            Node node = nodes.get(nodes.size() - 1);
+            assert node instanceof NodeEntryInObject;
+            NodeEntryInObject nodeEntryInObject = (NodeEntryInObject) node;
+            nodeEntryInObject.value = new NodeObject(currentParentElementIndex);
+        }
+        else {
+            nodes.add(new NodeObject(currentParentElementIndex));
+        }
         currentParentElementIndex = nodes.size() - 1;
         currentState = IN_OBJECT;
     }
@@ -247,9 +263,6 @@ public class MessagePackGenerator
     private void endCurrentContainer()
     {
         Node parent = nodes.get(currentParentElementIndex);
-        assert parent instanceof NodeContainer;
-        NodeContainer parentContainer = (NodeContainer) parent;
-        parentContainer.childCount = nodes.size() - 1 - currentParentElementIndex;
         if (currentParentElementIndex == 0) {
             isElementsClosed = true;
             currentParentElementIndex = parent.parentIndex;
@@ -257,15 +270,28 @@ public class MessagePackGenerator
         }
 
         currentParentElementIndex = parent.parentIndex;
+        assert currentParentElementIndex >= 0;
         Node currentParent = nodes.get(currentParentElementIndex);
-        if (currentParent instanceof NodeObject) {
+        incrementChildCount(currentParent);
+        if (currentParent instanceof NodeEntryInObject) {
+            if (((NodeEntryInObject) currentParent).value instanceof NodeObject) {
+                currentState = IN_OBJECT;
+            }
+            else if (((NodeEntryInObject) currentParent).value instanceof NodeArray) {
+                currentState = IN_ARRAY;
+            }
+            else {
+                throw new AssertionError();
+            }
+        }
+        else if (currentParent instanceof NodeObject) {
             currentState = IN_OBJECT;
         }
         else if (currentParent instanceof NodeArray) {
             currentState = IN_ARRAY;
         }
         else {
-            throw new IllegalStateException();
+            throw new IllegalStateException("Unexpected current parent: " + currentParent);
         }
     }
 
@@ -373,6 +399,19 @@ public class MessagePackGenerator
         messagePacker.packArrayHeader(container.childCount);
     }
 
+    private void incrementChildCount(Node parent)
+    {
+        if (parent instanceof NodeEntryInObject) {
+            Object containerParent = ((NodeEntryInObject) parent).value;
+            assert containerParent instanceof NodeContainer;
+            ((NodeContainer) containerParent).childCount++;
+        }
+        else {
+            assert parent instanceof NodeContainer;
+            ((NodeContainer) parent).childCount++;
+        }
+    }
+
     private void addKeyNode(Object key)
     {
         if (currentState != IN_OBJECT) {
@@ -390,11 +429,13 @@ public class MessagePackGenerator
                 assert node instanceof NodeEntryInObject;
                 NodeEntryInObject nodeEntryInObject = (NodeEntryInObject) node;
                 nodeEntryInObject.value = value;
+                incrementChildCount(nodes.get(node.parentIndex));
                 break;
             }
             case IN_ARRAY: {
                 Node node = new NodeEntryInArray(currentParentElementIndex, value);
                 nodes.add(node);
+                incrementChildCount(nodes.get(node.parentIndex));
                 break;
             }
             default:
@@ -481,11 +522,11 @@ public class MessagePackGenerator
     @Override
     public void writeFieldName(SerializableString name) throws IOException
     {
-        if (name instanceof MessagePackSerializedString) {
-            addKeyNode(((MessagePackSerializedString) name).getRawValue());
+        if (name instanceof SerializedString) {
+        writeFieldName(name.getValue());
         }
-        else if (name instanceof SerializedString) {
-            writeFieldName(name.getValue());
+        else if (name instanceof MessagePackSerializedString) {
+            addKeyNode(((MessagePackSerializedString) name).getRawValue());
         }
         else {
             throw new IllegalArgumentException("Unsupported key: " + name);
@@ -705,7 +746,15 @@ public class MessagePackGenerator
             else if (node instanceof NodeEntryInObject) {
                 NodeEntryInObject nodeEntry = (NodeEntryInObject) node;
                 pack(nodeEntry.key);
-                pack(nodeEntry.value);
+                if (nodeEntry.value instanceof NodeObject) {
+                    packObject((NodeObject) nodeEntry.value);
+                }
+                else if (nodeEntry.value instanceof NodeArray) {
+                    packArray((NodeArray) nodeEntry.value);
+                }
+                else {
+                    pack(nodeEntry.value);
+                }
             }
             else if (node instanceof NodeArray) {
                 packArray((NodeArray) node);
