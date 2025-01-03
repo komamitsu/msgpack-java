@@ -22,21 +22,26 @@ import com.fasterxml.jackson.core.base.GeneratorBase;
 import com.fasterxml.jackson.core.io.SerializedString;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessagePacker;
+import org.msgpack.core.annotations.Nullable;
 import org.msgpack.core.buffer.MessageBufferOutput;
 import org.msgpack.core.buffer.OutputStreamBufferOutput;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
 public class MessagePackGenerator
         extends GeneratorBase
 {
+    private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
     private static final int IN_ROOT = 0;
     private static final int IN_OBJECT = 1;
     private static final int IN_ARRAY = 2;
@@ -46,9 +51,31 @@ public class MessagePackGenerator
     private final MessagePack.PackerConfig packerConfig;
 
     private int currentParentElementIndex = -1;
-    private int currentState;
+    private int currentState = IN_ROOT;
     private final List<Node> nodes;
     private boolean isElementsClosed = false;
+
+    private static final boolean STRING_VALUE_FIELD_IS_CHARS;
+    static {
+        boolean stringValueFieldIsChars = false;
+        try {
+            Field stringValueField = String.class.getDeclaredField("value");
+            stringValueFieldIsChars = stringValueField.getType() == char[].class;
+        }
+        catch (NoSuchFieldException ignored) {
+        }
+        STRING_VALUE_FIELD_IS_CHARS = stringValueFieldIsChars;
+    }
+
+    private static class AsciiCharString
+    {
+        public final byte[] bytes;
+
+        public AsciiCharString(byte[] bytes)
+        {
+            this.bytes = bytes;
+        }
+    }
 
     private abstract static class Node
     {
@@ -243,6 +270,11 @@ public class MessagePackGenerator
         if (v instanceof String) {
             messagePacker.packString((String) v);
         }
+        else if (v instanceof AsciiCharString) {
+            byte[] bytes = ((AsciiCharString) v).bytes;
+            messagePacker.packRawStringHeader(bytes.length);
+            messagePacker.writePayload(bytes);
+        }
         else if (v instanceof Integer) {
             messagePacker.packInt((Integer) v);
         }
@@ -306,10 +338,7 @@ public class MessagePackGenerator
             BigInteger integer = decimal.toBigIntegerExact();
             messagePacker.packBigInteger(integer);
         }
-        catch (ArithmeticException e) {
-            failedToPackAsBI = true;
-        }
-        catch (IllegalArgumentException e) {
+        catch (ArithmeticException | IllegalArgumentException e) {
             failedToPackAsBI = true;
         }
 
@@ -338,7 +367,7 @@ public class MessagePackGenerator
         messagePacker.packArrayHeader(container.childCount);
     }
 
-    private void addKeyToStackTop(Object key)
+    private void addKeyNode(Object key)
     {
         if (currentState != IN_OBJECT) {
             throw new IllegalStateException();
@@ -347,7 +376,7 @@ public class MessagePackGenerator
         nodes.add(node);
     }
 
-    private void addValueToStackTop(Object value) throws IOException
+    private void addValueNode(Object value) throws IOException
     {
         switch (currentState) {
             case IN_OBJECT: {
@@ -369,17 +398,85 @@ public class MessagePackGenerator
         }
     }
 
+    @Nullable
+    private byte[] getBytesIfAscii(char[] chars, int offset, int len)
+    {
+        byte[] bytes = new byte[len];
+        for (int i = offset; i < offset + len; i++) {
+            char c = chars[i];
+            if (c >= 0x80) {
+                return null;
+            }
+            bytes[i] = (byte) c;
+        }
+        return bytes;
+    }
+
+    private boolean areAllAsciiBytes(byte[] bytes, int offset, int len)
+    {
+        for (int i = offset; i < offset + len; i++) {
+            if ((bytes[i] & 0x80) != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void writeCharArrayTextKey(char[] text, int offset, int len)
+    {
+        byte[] bytes = getBytesIfAscii(text, offset, len);
+        if (bytes != null) {
+            addKeyNode(new AsciiCharString(bytes));
+            return;
+        }
+        addKeyNode(new String(text, offset, len));
+    }
+
+    private void writeCharArrayTextValue(char[] text, int offset, int len) throws IOException
+    {
+        byte[] bytes = getBytesIfAscii(text, offset, len);
+        if (bytes != null) {
+            addValueNode(new AsciiCharString(bytes));
+            return;
+        }
+        addValueNode(new String(text, offset, len));
+    }
+
+    private void writeByteArrayTextValue(byte[] text, int offset, int len) throws IOException
+    {
+        if (areAllAsciiBytes(text, offset, len)) {
+            addValueNode(new AsciiCharString(text));
+            return;
+        }
+        addValueNode(new String(text, offset, len, DEFAULT_CHARSET));
+    }
+
+    private void writeByteArrayTextKey(byte[] text, int offset, int len) throws IOException
+    {
+        if (areAllAsciiBytes(text, offset, len)) {
+            addValueNode(new AsciiCharString(text));
+            return;
+        }
+        addValueNode(new String(text, offset, len, DEFAULT_CHARSET));
+    }
+
     @Override
     public void writeFieldName(String name) throws IOException
     {
-        addKeyToStackTop(name);
+        if (STRING_VALUE_FIELD_IS_CHARS) {
+            char[] chars = name.toCharArray();
+            writeCharArrayTextKey(chars, 0, chars.length);
+        }
+        else {
+            addKeyNode(name);
+        }
     }
 
     @Override
     public void writeFieldName(SerializableString name) throws IOException
     {
         if (name instanceof MessagePackSerializedString) {
-            addKeyToStackTop(((MessagePackSerializedString) name).getRawValue());
+            addKeyNode(((MessagePackSerializedString) name).getRawValue());
         }
         else if (name instanceof SerializedString) {
             writeFieldName(name.getValue());
@@ -393,42 +490,46 @@ public class MessagePackGenerator
     public void writeString(String text)
             throws IOException
     {
-        addValueToStackTop(text);
+        if (STRING_VALUE_FIELD_IS_CHARS) {
+            char[] chars = text.toCharArray();
+            writeCharArrayTextValue(chars, 0, chars.length);
+        }
+        else {
+            addValueNode(text);
+        }
     }
 
     @Override
     public void writeString(char[] text, int offset, int len)
             throws IOException
     {
-        if (true) {
-            throw new RuntimeException();
-        }
+        writeCharArrayTextValue(text, offset, len);
     }
 
     @Override
     public void writeRawUTF8String(byte[] text, int offset, int length)
             throws IOException
     {
-        if (true) {
-            throw new RuntimeException();
-        }
+        writeByteArrayTextValue(text, offset, length);
     }
 
     @Override
     public void writeUTF8String(byte[] text, int offset, int length)
             throws IOException
     {
-        if (true) {
-            throw new RuntimeException();
-        }
+        writeByteArrayTextValue(text, offset, length);
     }
 
     @Override
     public void writeRaw(String text)
             throws IOException
     {
-        if (true) {
-            throw new RuntimeException();
+        if (STRING_VALUE_FIELD_IS_CHARS) {
+            char[] chars = text.toCharArray();
+            writeCharArrayTextValue(chars, 0, chars.length);
+        }
+        else {
+            addValueNode(text);
         }
     }
 
@@ -436,78 +537,72 @@ public class MessagePackGenerator
     public void writeRaw(String text, int offset, int len)
             throws IOException
     {
-        if (true) {
-            throw new RuntimeException();
-        }
+        // TODO: There is room to optimize this.
+        char[] chars = text.toCharArray();
+        writeCharArrayTextValue(chars, offset, len);
     }
 
     @Override
     public void writeRaw(char[] text, int offset, int len)
             throws IOException
     {
-        if (true) {
-            throw new RuntimeException();
-        }
+        writeCharArrayTextValue(text, offset, len);
     }
 
     @Override
     public void writeRaw(char c)
             throws IOException
     {
-        if (true) {
-            throw new RuntimeException();
-        }
+        writeCharArrayTextValue(new char[] { c }, 0, 1);
     }
 
     @Override
     public void writeBinary(Base64Variant b64variant, byte[] data, int offset, int len)
             throws IOException
     {
-        if (true) {
-            throw new RuntimeException();
-        }
+        addValueNode(ByteBuffer.wrap(data, offset, len));
     }
 
     @Override
     public void writeNumber(int v)
             throws IOException
     {
-        addValueToStackTop(v);
+        addValueNode(v);
     }
 
     @Override
     public void writeNumber(long v)
             throws IOException
     {
-        addValueToStackTop(v);
+        addValueNode(v);
     }
 
     @Override
     public void writeNumber(BigInteger v)
             throws IOException
     {
-        addValueToStackTop(v);
+        addValueNode(v);
     }
 
     @Override
     public void writeNumber(double d)
             throws IOException
     {
-        addValueToStackTop(d);
+        addValueNode(d);
     }
 
     @Override
     public void writeNumber(float f)
             throws IOException
     {
-        addValueToStackTop(f);
+        addValueNode(f);
     }
 
     @Override
     public void writeNumber(BigDecimal dec)
             throws IOException
     {
-        addValueToStackTop(dec);
+        addValueNode(dec);
     }
 
     @Override
@@ -519,7 +614,7 @@ public class MessagePackGenerator
         // proper numeric types not String, it's better to use the other APIs instead.
         try {
             long l = Long.parseLong(encodedValue);
-            addValueToStackTop(l);
+            addValueNode(l);
             return;
         }
         catch (NumberFormatException ignored) {
@@ -527,7 +622,7 @@ public class MessagePackGenerator
 
         try {
             double d = Double.parseDouble(encodedValue);
-            addValueToStackTop(d);
+            addValueNode(d);
             return;
         }
         catch (NumberFormatException ignored) {
@@ -535,7 +630,7 @@ public class MessagePackGenerator
 
         try {
             BigInteger bi = new BigInteger(encodedValue);
-            addValueToStackTop(bi);
+            addValueNode(bi);
             return;
         }
         catch (NumberFormatException ignored) {
@@ -543,7 +638,7 @@ public class MessagePackGenerator
 
         try {
             BigDecimal bc = new BigDecimal(encodedValue);
-            addValueToStackTop(bc);
+            addValueNode(bc);
             return;
         }
         catch (NumberFormatException ignored) {
@@ -556,20 +651,20 @@ public class MessagePackGenerator
     public void writeBoolean(boolean state)
             throws IOException
     {
-        addValueToStackTop(state);
+        addValueNode(state);
     }
 
     @Override
     public void writeNull()
             throws IOException
     {
-        addValueToStackTop(null);
+        addValueNode(null);
     }
 
     public void writeExtensionType(MessagePackExtensionType extensionType)
             throws IOException
     {
-        addValueToStackTop(extensionType);
+        addValueNode(extensionType);
     }
 
     @Override
