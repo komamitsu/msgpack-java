@@ -201,18 +201,15 @@ public class MessagePackParser
 
         JsonToken nextToken;
         switch (valueType) {
-            case NIL:
-                messageUnpacker.unpackNil();
-                nextToken = JsonToken.VALUE_NULL;
-                break;
-            case BOOLEAN:
-                boolean b = messageUnpacker.unpackBoolean();
+            case STRING:
+                type = Type.STRING;
+                stringValue = messageUnpacker.unpackString();
                 if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
-                    streamReadContext.setCurrentName(Boolean.toString(b));
+                    streamReadContext.setCurrentName(stringValue);
                     nextToken = JsonToken.FIELD_NAME;
                 }
                 else {
-                    nextToken = b ? JsonToken.VALUE_TRUE : JsonToken.VALUE_FALSE;
+                    nextToken = JsonToken.VALUE_STRING;
                 }
                 break;
             case INTEGER:
@@ -254,6 +251,20 @@ public class MessagePackParser
                     nextToken = JsonToken.VALUE_NUMBER_INT;
                 }
                 break;
+            case NIL:
+                messageUnpacker.unpackNil();
+                nextToken = JsonToken.VALUE_NULL;
+                break;
+            case BOOLEAN:
+                boolean b = messageUnpacker.unpackBoolean();
+                if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
+                    streamReadContext.setCurrentName(Boolean.toString(b));
+                    nextToken = JsonToken.FIELD_NAME;
+                }
+                else {
+                    nextToken = b ? JsonToken.VALUE_TRUE : JsonToken.VALUE_FALSE;
+                }
+                break;
             case FLOAT:
                 type = Type.DOUBLE;
                 doubleValue = messageUnpacker.unpackDouble();
@@ -263,17 +274,6 @@ public class MessagePackParser
                 }
                 else {
                     nextToken = JsonToken.VALUE_NUMBER_FLOAT;
-                }
-                break;
-            case STRING:
-                type = Type.STRING;
-                stringValue = messageUnpacker.unpackString();
-                if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
-                    streamReadContext.setCurrentName(stringValue);
-                    nextToken = JsonToken.FIELD_NAME;
-                }
-                else {
-                    nextToken = JsonToken.VALUE_STRING;
                 }
                 break;
             case BINARY:
