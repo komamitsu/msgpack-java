@@ -23,7 +23,6 @@ import com.fasterxml.jackson.core.io.SerializedString;
 import com.fasterxml.jackson.core.json.JsonWriteContext;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessagePacker;
-import org.msgpack.core.annotations.Nullable;
 import org.msgpack.core.buffer.MessageBufferOutput;
 import org.msgpack.core.buffer.OutputStreamBufferOutput;
 
@@ -33,42 +32,80 @@ import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
 public class MessagePackGenerator
         extends GeneratorBase
 {
-    private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
     private final MessagePacker messagePacker;
     private static final ThreadLocal<OutputStreamBufferOutput> messageBufferOutputHolder = new ThreadLocal<>();
     private final OutputStream output;
     private final MessagePack.PackerConfig packerConfig;
 
     private int currentParentElementIndex = -1;
-    private final List<Element> elements;
+    private final List<Node> nodes;
     private boolean isElementsClosed = false;
 
-    private static final byte NON_CONTAINER = 0;
-    private static final byte CONTAINER_OBJECT = 1;
-    private static final byte CONTAINER_ARRAY = 2;
-
-    private static final class Element
+    private abstract static class Node
     {
         // Root containers have -1.
         final int parentIndex;
-        final byte containerType;
-        // Only for containers.
-        int childCount;
-        // Only for non-containers.
-        @Nullable Object data;
 
-        public Element(int parentIndex, byte containerType)
+        public Node(int parentIndex)
         {
             this.parentIndex = parentIndex;
-            this.containerType = containerType;
+        }
+    }
+
+    private abstract static class NodeContainer extends Node
+    {
+        // Only for containers.
+        int childCount;
+
+        public NodeContainer(int parentIndex)
+        {
+            super(parentIndex);
+        }
+    }
+
+    private static class NodeArray extends NodeContainer
+    {
+        public NodeArray(int parentIndex)
+        {
+            super(parentIndex);
+        }
+    }
+
+    private static class NodeObject extends NodeContainer
+    {
+        public NodeObject(int parentIndex)
+        {
+            super(parentIndex);
+        }
+    }
+
+    private static class NodeEntryInArray extends Node
+    {
+        final Object value;
+
+        public NodeEntryInArray(int parentIndex, Object value)
+        {
+            super(parentIndex);
+            this.value = value;
+        }
+    }
+
+    private static class NodeEntryInObject extends Node
+    {
+        final Object key;
+        // Lazily initialized.
+        Object value;
+
+        public NodeEntryInObject(int parentIndex, Object key)
+        {
+            super(parentIndex);
+            this.key = key;
         }
     }
 
@@ -83,7 +120,7 @@ public class MessagePackGenerator
         this.output = out;
         this.messagePacker = packerConfig.newPacker(out);
         this.packerConfig = packerConfig;
-        this.elements = new ArrayList<>();
+        this.nodes = new ArrayList<>();
     }
 
     public MessagePackGenerator(
@@ -98,7 +135,7 @@ public class MessagePackGenerator
         this.output = out;
         this.messagePacker = packerConfig.newPacker(getMessageBufferOutputForOutputStream(out, reuseResourceInGenerator));
         this.packerConfig = packerConfig;
-        this.elements = new ArrayList<>();
+        this.nodes = new ArrayList<>();
     }
 
     private MessageBufferOutput getMessageBufferOutputForOutputStream(
@@ -126,7 +163,9 @@ public class MessagePackGenerator
     @Override
     public void writeStartArray()
     {
-        startCurrentContainer(CONTAINER_ARRAY);
+        _writeContext = _writeContext.createChildArrayContext();
+        nodes.add(new NodeArray(currentParentElementIndex));
+        currentParentElementIndex = nodes.size() - 1;
     }
 
     @Override
@@ -142,7 +181,9 @@ public class MessagePackGenerator
     @Override
     public void writeStartObject()
     {
-        startCurrentContainer(CONTAINER_OBJECT);
+        _writeContext = _writeContext.createChildObjectContext();
+        nodes.add(new NodeObject(currentParentElementIndex));
+        currentParentElementIndex = nodes.size() - 1;
     }
 
     @Override
@@ -155,26 +196,12 @@ public class MessagePackGenerator
         endCurrentContainer();
     }
 
-    private void startCurrentContainer(byte containerType)
-    {
-        switch (containerType) {
-            case CONTAINER_OBJECT:
-                _writeContext = _writeContext.createChildObjectContext();
-                break;
-            case CONTAINER_ARRAY:
-                _writeContext = _writeContext.createChildArrayContext();
-                break;
-            default:
-                throw new AssertionError();
-        }
-        elements.add(new Element(currentParentElementIndex, containerType));
-        currentParentElementIndex = elements.size() - 1;
-    }
-
     private void endCurrentContainer()
     {
-        Element parent = elements.get(currentParentElementIndex);
-        parent.childCount = _writeContext.getEntryCount();
+        Node parent = nodes.get(currentParentElementIndex);
+        assert parent instanceof NodeContainer;
+        NodeContainer parentContainer = (NodeContainer) parent;
+        parentContainer.childCount = _writeContext.getEntryCount();
         if (currentParentElementIndex == 0) {
             isElementsClosed = true;
         }
@@ -271,25 +298,18 @@ public class MessagePackGenerator
         }
     }
 
-    private void packObject(Element container)
+    private void packObject(NodeObject container)
             throws IOException
     {
         MessagePacker messagePacker = getMessagePacker();
         messagePacker.packMapHeader(container.childCount);
     }
 
-    private void packArray(Element container)
+    private void packArray(NodeArray container)
             throws IOException
     {
         MessagePacker messagePacker = getMessagePacker();
         messagePacker.packArrayHeader(container.childCount);
-    }
-
-    private void addContainerElement(Object data)
-    {
-        Element element = new Element(currentParentElementIndex, NON_CONTAINER);
-        element.data = data;
-        elements.add(element);
     }
 
     private void addKeyToStackTop(Object key)
@@ -297,13 +317,21 @@ public class MessagePackGenerator
         if (!_writeContext.inObject()) {
             throw new IllegalStateException();
         }
-        addContainerElement(key);
+        Node node = new NodeEntryInObject(currentParentElementIndex, key);
+        nodes.add(node);
     }
 
     private void addValueToStackTop(Object value) throws IOException
     {
-        if (_writeContext.inObject() || _writeContext.inArray()) {
-            addContainerElement(value);
+        if (_writeContext.inObject()) {
+            Node node = nodes.get(nodes.size() - 1);
+            assert node instanceof NodeEntryInObject;
+            NodeEntryInObject nodeEntryInObject = (NodeEntryInObject) node;
+            nodeEntryInObject.value = value;
+        }
+        else if (_writeContext.inArray()) {
+            Node node = new NodeEntryInArray(currentParentElementIndex, value);
+            nodes.add(node);
         }
         else {
             pack(value);
@@ -554,24 +582,28 @@ public class MessagePackGenerator
             return;
         }
 
-        for (int i = 0; i < elements.size(); i++) {
-            Element element = elements.get(i);
-            switch (element.containerType) {
-                case NON_CONTAINER:
-                    pack(element.data);
-                    break;
-                case CONTAINER_OBJECT:
-                    packObject(element);
-                    break;
-                case CONTAINER_ARRAY:
-                    packArray(element);
-                    break;
-                default:
-                    throw new AssertionError();
+        for (int i = 0; i < nodes.size(); i++) {
+            Node node = nodes.get(i);
+            if (node instanceof NodeObject) {
+                packObject((NodeObject) node);
+            }
+            else if (node instanceof NodeEntryInObject) {
+                NodeEntryInObject nodeEntry = (NodeEntryInObject) node;
+                pack(nodeEntry.key);
+                pack(nodeEntry.value);
+            }
+            else if (node instanceof NodeArray) {
+                packArray((NodeArray) node);
+            }
+            else if (node instanceof NodeEntryInArray) {
+                pack(((NodeEntryInArray) node).value);
+            }
+            else {
+                throw new AssertionError();
             }
         }
         flushMessagePacker();
-        elements.clear();
+        nodes.clear();
         isElementsClosed = false;
     }
 

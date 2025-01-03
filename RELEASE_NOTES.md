@@ -191,7 +191,7 @@ Intenral changes:
 
 ## 0.8.2
  * Add some missing asXXX methods in Value
- * ValueFactory.MapBuilder now preserves the original element order (by using LinkedHashMap)
+ * ValueFactory.MapBuilder now preserves the original node order (by using LinkedHashMap)
  * Fix ExtensionType property
 
 ## 0.8.1
