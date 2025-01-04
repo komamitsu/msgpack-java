@@ -73,7 +73,7 @@ public class MessagePackGenerator
         }
     }
 
-    private static class AsciiCharString
+    private static final class AsciiCharString
     {
         public final byte[] bytes;
 
@@ -115,7 +115,7 @@ public class MessagePackGenerator
         }
     }
 
-    private static class NodeArray extends NodeContainer
+    private static final class NodeArray extends NodeContainer
     {
         public NodeArray(int parentIndex)
         {
@@ -129,7 +129,7 @@ public class MessagePackGenerator
         }
     }
 
-    private static class NodeObject extends NodeContainer
+    private static final class NodeObject extends NodeContainer
     {
         public NodeObject(int parentIndex)
         {
@@ -143,7 +143,7 @@ public class MessagePackGenerator
         }
     }
 
-    private static class NodeEntryInArray extends Node
+    private static final class NodeEntryInArray extends Node
     {
         final Object value;
 
@@ -166,7 +166,7 @@ public class MessagePackGenerator
         }
     }
 
-    private static class NodeEntryInObject extends Node
+    private static final class NodeEntryInObject extends Node
     {
         final Object key;
         // Lazily initialized.
@@ -546,7 +546,7 @@ public class MessagePackGenerator
     public void writeFieldName(SerializableString name) throws IOException
     {
         if (name instanceof SerializedString) {
-        writeFieldName(name.getValue());
+            writeFieldName(name.getValue());
         }
         else if (name instanceof MessagePackSerializedString) {
             addKeyNode(((MessagePackSerializedString) name).getRawValue());
@@ -763,10 +763,7 @@ public class MessagePackGenerator
 
         for (int i = 0; i < nodes.size(); i++) {
             Node node = nodes.get(i);
-            if (node instanceof NodeObject) {
-                packObject((NodeObject) node);
-            }
-            else if (node instanceof NodeEntryInObject) {
+            if (node instanceof NodeEntryInObject) {
                 NodeEntryInObject nodeEntry = (NodeEntryInObject) node;
                 packNonContainer(nodeEntry.key);
                 if (nodeEntry.value instanceof NodeObject) {
@@ -779,11 +776,14 @@ public class MessagePackGenerator
                     packNonContainer(nodeEntry.value);
                 }
             }
-            else if (node instanceof NodeArray) {
-                packArray((NodeArray) node);
+            else if (node instanceof NodeObject) {
+                packObject((NodeObject) node);
             }
             else if (node instanceof NodeEntryInArray) {
                 packNonContainer(((NodeEntryInArray) node).value);
+            }
+            else if (node instanceof NodeArray) {
+                packArray((NodeArray) node);
             }
             else {
                 throw new AssertionError();
@@ -815,7 +815,7 @@ public class MessagePackGenerator
     @Override
     protected void _verifyValueWrite(String typeMsg) throws IOException
     {
-        // FIXME
+        // FIXME?
     }
 
     private MessagePacker getMessagePacker()
