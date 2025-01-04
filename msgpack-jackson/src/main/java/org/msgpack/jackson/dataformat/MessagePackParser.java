@@ -40,6 +40,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 
 public class MessagePackParser
         extends ParserMinimalBase
@@ -58,6 +59,8 @@ public class MessagePackParser
     private long currentPosition;
     private final IOContext ioContext;
     private ExtensionTypeCustomDeserializers extTypeCustomDesers;
+    private final byte[] tempBytes = new byte[64];
+    private final char[] tempChars = new char[64];
 
     private enum Type
     {
@@ -172,6 +175,31 @@ public class MessagePackParser
         return null;
     }
 
+    private String unpackString(MessageUnpacker messageUnpacker) throws IOException
+    {
+        int strLen = messageUnpacker.unpackRawStringHeader();
+        if (strLen <= tempBytes.length) {
+            messageUnpacker.readPayload(tempBytes, 0, strLen);
+            if (MessagePackGenerator.STRING_VALUE_FIELD_IS_CHARS.get()) {
+                for (int i = 0; i < strLen; i++) {
+                    byte b = tempBytes[i];
+                    if ((0x80 & b) != 0) {
+                        return new String(tempBytes, 0, strLen, StandardCharsets.UTF_8);
+                    }
+                    tempChars[i] = (char) b;
+                }
+                return new String(tempChars, 0, strLen);
+            }
+            else {
+                return new String(tempBytes, 0, strLen);
+            }
+        }
+        else {
+            byte[] bytes = messageUnpacker.readPayload(strLen);
+            return new String(bytes, 0, strLen, StandardCharsets.UTF_8);
+        }
+    }
+
     @Override
     public JsonToken nextToken()
             throws IOException, JsonParseException
@@ -203,7 +231,7 @@ public class MessagePackParser
         switch (valueType) {
             case STRING:
                 type = Type.STRING;
-                stringValue = messageUnpacker.unpackString();
+                stringValue = unpackString(messageUnpacker);
                 if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
                     streamReadContext.setCurrentName(stringValue);
                     nextToken = JsonToken.FIELD_NAME;
@@ -634,6 +662,7 @@ public class MessagePackParser
         return currentName();
     }
 
+    // TODO: Optimize this.
     private MessageUnpacker getMessageUnpacker()
     {
         if (!reuseResourceInParser) {

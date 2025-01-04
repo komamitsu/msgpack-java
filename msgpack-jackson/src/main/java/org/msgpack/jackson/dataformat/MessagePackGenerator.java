@@ -56,7 +56,7 @@ public class MessagePackGenerator
     private final List<Node> nodes;
     private boolean isElementsClosed = false;
 
-    private static final Supplier<Boolean> STRING_VALUE_FIELD_IS_CHARS;
+    static final Supplier<Boolean> STRING_VALUE_FIELD_IS_CHARS;
     static {
         boolean stringValueFieldIsChars = false;
         try {
