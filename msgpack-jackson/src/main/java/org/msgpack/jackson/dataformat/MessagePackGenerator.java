@@ -92,6 +92,8 @@ public class MessagePackGenerator
         {
             this.parentIndex = parentIndex;
         }
+
+        abstract void incrementChildCount();
     }
 
     private abstract static class NodeContainer extends Node
@@ -102,6 +104,12 @@ public class MessagePackGenerator
         public NodeContainer(int parentIndex)
         {
             super(parentIndex);
+        }
+
+        @Override
+        void incrementChildCount()
+        {
+            childCount++;
         }
     }
 
@@ -130,6 +138,12 @@ public class MessagePackGenerator
             super(parentIndex);
             this.value = value;
         }
+
+        @Override
+        void incrementChildCount()
+        {
+            throw new UnsupportedOperationException();
+        }
     }
 
     private static class NodeEntryInObject extends Node
@@ -142,6 +156,13 @@ public class MessagePackGenerator
         {
             super(parentIndex);
             this.key = key;
+        }
+
+        @Override
+        void incrementChildCount()
+        {
+            assert value instanceof NodeContainer;
+            ((NodeContainer) value).childCount++;
         }
     }
 
@@ -272,7 +293,7 @@ public class MessagePackGenerator
         currentParentElementIndex = parent.parentIndex;
         assert currentParentElementIndex >= 0;
         Node currentParent = nodes.get(currentParentElementIndex);
-        incrementChildCount(currentParent);
+        currentParent.incrementChildCount();
         if (currentParent instanceof NodeEntryInObject) {
             if (((NodeEntryInObject) currentParent).value instanceof NodeObject) {
                 currentState = IN_OBJECT;
@@ -399,19 +420,6 @@ public class MessagePackGenerator
         messagePacker.packArrayHeader(container.childCount);
     }
 
-    private void incrementChildCount(Node parent)
-    {
-        if (parent instanceof NodeEntryInObject) {
-            Object containerParent = ((NodeEntryInObject) parent).value;
-            assert containerParent instanceof NodeContainer;
-            ((NodeContainer) containerParent).childCount++;
-        }
-        else {
-            assert parent instanceof NodeContainer;
-            ((NodeContainer) parent).childCount++;
-        }
-    }
-
     private void addKeyNode(Object key)
     {
         if (currentState != IN_OBJECT) {
@@ -429,13 +437,13 @@ public class MessagePackGenerator
                 assert node instanceof NodeEntryInObject;
                 NodeEntryInObject nodeEntryInObject = (NodeEntryInObject) node;
                 nodeEntryInObject.value = value;
-                incrementChildCount(nodes.get(node.parentIndex));
+                nodes.get(node.parentIndex).incrementChildCount();
                 break;
             }
             case IN_ARRAY: {
                 Node node = new NodeEntryInArray(currentParentElementIndex, value);
                 nodes.add(node);
-                incrementChildCount(nodes.get(node.parentIndex));
+                nodes.get(node.parentIndex).incrementChildCount();
                 break;
             }
             default:
