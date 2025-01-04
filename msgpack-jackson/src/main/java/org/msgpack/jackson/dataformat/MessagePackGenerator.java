@@ -94,6 +94,8 @@ public class MessagePackGenerator
         }
 
         abstract void incrementChildCount();
+
+        abstract int currentStateAsParent();
     }
 
     private abstract static class NodeContainer extends Node
@@ -119,6 +121,12 @@ public class MessagePackGenerator
         {
             super(parentIndex);
         }
+
+        @Override
+        int currentStateAsParent()
+        {
+            return IN_ARRAY;
+        }
     }
 
     private static class NodeObject extends NodeContainer
@@ -126,6 +134,12 @@ public class MessagePackGenerator
         public NodeObject(int parentIndex)
         {
             super(parentIndex);
+        }
+
+        @Override
+        int currentStateAsParent()
+        {
+            return IN_OBJECT;
         }
     }
 
@@ -141,6 +155,12 @@ public class MessagePackGenerator
 
         @Override
         void incrementChildCount()
+        {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        int currentStateAsParent()
         {
             throw new UnsupportedOperationException();
         }
@@ -163,6 +183,20 @@ public class MessagePackGenerator
         {
             assert value instanceof NodeContainer;
             ((NodeContainer) value).childCount++;
+        }
+
+        @Override
+        int currentStateAsParent()
+        {
+            if (value instanceof NodeObject) {
+                return IN_OBJECT;
+            }
+            else if (value instanceof NodeArray) {
+                return IN_ARRAY;
+            }
+            else {
+                throw new AssertionError();
+            }
         }
     }
 
@@ -294,29 +328,10 @@ public class MessagePackGenerator
         assert currentParentElementIndex >= 0;
         Node currentParent = nodes.get(currentParentElementIndex);
         currentParent.incrementChildCount();
-        if (currentParent instanceof NodeEntryInObject) {
-            if (((NodeEntryInObject) currentParent).value instanceof NodeObject) {
-                currentState = IN_OBJECT;
-            }
-            else if (((NodeEntryInObject) currentParent).value instanceof NodeArray) {
-                currentState = IN_ARRAY;
-            }
-            else {
-                throw new AssertionError();
-            }
-        }
-        else if (currentParent instanceof NodeObject) {
-            currentState = IN_OBJECT;
-        }
-        else if (currentParent instanceof NodeArray) {
-            currentState = IN_ARRAY;
-        }
-        else {
-            throw new IllegalStateException("Unexpected current parent: " + currentParent);
-        }
+        currentState = currentParent.currentStateAsParent();
     }
 
-    private void pack(Object v)
+    private void packNonContainer(Object v)
             throws IOException
     {
         MessagePacker messagePacker = getMessagePacker();
@@ -333,20 +348,6 @@ public class MessagePackGenerator
         }
         else if (v == null) {
             messagePacker.packNil();
-        }
-        else if (v instanceof ByteBuffer) {
-            ByteBuffer bb = (ByteBuffer) v;
-            int len = bb.remaining();
-            if (bb.hasArray()) {
-                messagePacker.packBinaryHeader(len);
-                messagePacker.writePayload(bb.array(), bb.arrayOffset(), len);
-            }
-            else {
-                byte[] data = new byte[len];
-                bb.get(data);
-                messagePacker.packBinaryHeader(len);
-                messagePacker.addPayload(data);
-            }
         }
         else if (v instanceof Float) {
             messagePacker.packFloat((Float) v);
@@ -365,6 +366,20 @@ public class MessagePackGenerator
         }
         else if (v instanceof Boolean) {
             messagePacker.packBoolean((Boolean) v);
+        }
+        else if (v instanceof ByteBuffer) {
+            ByteBuffer bb = (ByteBuffer) v;
+            int len = bb.remaining();
+            if (bb.hasArray()) {
+                messagePacker.packBinaryHeader(len);
+                messagePacker.writePayload(bb.array(), bb.arrayOffset(), len);
+            }
+            else {
+                byte[] data = new byte[len];
+                bb.get(data);
+                messagePacker.packBinaryHeader(len);
+                messagePacker.addPayload(data);
+            }
         }
         else if (v instanceof MessagePackExtensionType) {
             MessagePackExtensionType extensionType = (MessagePackExtensionType) v;
@@ -447,7 +462,7 @@ public class MessagePackGenerator
                 break;
             }
             default:
-                pack(value);
+                packNonContainer(value);
                 flushMessagePacker();
                 break;
         }
@@ -753,7 +768,7 @@ public class MessagePackGenerator
             }
             else if (node instanceof NodeEntryInObject) {
                 NodeEntryInObject nodeEntry = (NodeEntryInObject) node;
-                pack(nodeEntry.key);
+                packNonContainer(nodeEntry.key);
                 if (nodeEntry.value instanceof NodeObject) {
                     packObject((NodeObject) nodeEntry.value);
                 }
@@ -761,14 +776,14 @@ public class MessagePackGenerator
                     packArray((NodeArray) nodeEntry.value);
                 }
                 else {
-                    pack(nodeEntry.value);
+                    packNonContainer(nodeEntry.value);
                 }
             }
             else if (node instanceof NodeArray) {
                 packArray((NodeArray) node);
             }
             else if (node instanceof NodeEntryInArray) {
-                pack(((NodeEntryInArray) node).value);
+                packNonContainer(((NodeEntryInArray) node).value);
             }
             else {
                 throw new AssertionError();
