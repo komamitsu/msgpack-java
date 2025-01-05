@@ -17,7 +17,6 @@ package org.msgpack.jackson.dataformat;
 
 import com.fasterxml.jackson.core.Base64Variant;
 import com.fasterxml.jackson.core.JsonLocation;
-import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonStreamContext;
 import com.fasterxml.jackson.core.JsonToken;
@@ -75,12 +74,6 @@ public class MessagePackParser
     private BigInteger biValue;
     private MessagePackExtensionType extensionTypeValue;
 
-    public MessagePackParser(IOContext ctxt, int features, ObjectCodec objectCodec, InputStream in)
-            throws IOException
-    {
-        this(ctxt, features, objectCodec, in, true);
-    }
-
     public MessagePackParser(
             IOContext ctxt,
             int features,
@@ -90,12 +83,6 @@ public class MessagePackParser
             throws IOException
     {
         this(ctxt, features, new InputStreamBufferInput(in), objectCodec, in, reuseResourceInParser);
-    }
-
-    public MessagePackParser(IOContext ctxt, int features, ObjectCodec objectCodec, byte[] bytes)
-            throws IOException
-    {
-        this(ctxt, features, objectCodec, bytes, true);
     }
 
     public MessagePackParser(
@@ -195,12 +182,12 @@ public class MessagePackParser
     }
 
     @Override
-    public JsonToken nextToken()
-            throws IOException, JsonParseException
+    public JsonToken nextToken() throws IOException
     {
         tokenPosition = messageUnpacker.getTotalReadBytes();
 
-        if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
+        boolean isObjectValueSet = streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME;
+        if (isObjectValueSet) {
             if (!streamReadContext.expectMoreValues()) {
                 streamReadContext = streamReadContext.getParent();
                 return _updateToken(JsonToken.END_OBJECT);
@@ -218,14 +205,14 @@ public class MessagePackParser
         }
 
         MessageFormat format = messageUnpacker.getNextFormat();
-        ValueType valueType = messageUnpacker.getNextFormat().getValueType();
+        ValueType valueType = format.getValueType();
 
         JsonToken nextToken;
         switch (valueType) {
             case STRING:
                 type = Type.STRING;
                 stringValue = unpackString(messageUnpacker);
-                if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
+                if (isObjectValueSet) {
                     streamReadContext.setCurrentName(stringValue);
                     nextToken = JsonToken.FIELD_NAME;
                 }
@@ -264,7 +251,7 @@ public class MessagePackParser
                         break;
                 }
 
-                if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
+                if (isObjectValueSet) {
                     streamReadContext.setCurrentName(String.valueOf(v));
                     nextToken = JsonToken.FIELD_NAME;
                 }
@@ -278,7 +265,7 @@ public class MessagePackParser
                 break;
             case BOOLEAN:
                 boolean b = messageUnpacker.unpackBoolean();
-                if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
+                if (isObjectValueSet) {
                     streamReadContext.setCurrentName(Boolean.toString(b));
                     nextToken = JsonToken.FIELD_NAME;
                 }
@@ -289,7 +276,7 @@ public class MessagePackParser
             case FLOAT:
                 type = Type.DOUBLE;
                 doubleValue = messageUnpacker.unpackDouble();
-                if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
+                if (isObjectValueSet) {
                     streamReadContext.setCurrentName(String.valueOf(doubleValue));
                     nextToken = JsonToken.FIELD_NAME;
                 }
@@ -301,7 +288,7 @@ public class MessagePackParser
                 type = Type.BYTES;
                 int len = messageUnpacker.unpackBinaryHeader();
                 bytesValue = messageUnpacker.readPayload(len);
-                if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
+                if (isObjectValueSet) {
                     streamReadContext.setCurrentName(new String(bytesValue, MessagePack.UTF8));
                     nextToken = JsonToken.FIELD_NAME;
                 }
@@ -321,7 +308,7 @@ public class MessagePackParser
                 type = Type.EXT;
                 ExtensionTypeHeader header = messageUnpacker.unpackExtensionTypeHeader();
                 extensionTypeValue = new MessagePackExtensionType(header.getType(), messageUnpacker.readPayload(header.getLength()));
-                if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
+                if (isObjectValueSet) {
                     streamReadContext.setCurrentName(deserializedExtensionTypeValue().toString());
                     nextToken = JsonToken.FIELD_NAME;
                 }
@@ -341,13 +328,11 @@ public class MessagePackParser
 
     @Override
     protected void _handleEOF()
-            throws JsonParseException
     {
     }
 
     @Override
-    public String getText()
-            throws IOException, JsonParseException
+    public String getText() throws IOException
     {
         switch (type) {
             case STRING:
@@ -370,8 +355,7 @@ public class MessagePackParser
     }
 
     @Override
-    public char[] getTextCharacters()
-            throws IOException, JsonParseException
+    public char[] getTextCharacters() throws IOException
     {
         return getText().toCharArray();
     }
@@ -383,22 +367,19 @@ public class MessagePackParser
     }
 
     @Override
-    public int getTextLength()
-            throws IOException, JsonParseException
+    public int getTextLength() throws IOException
     {
         return getText().length();
     }
 
     @Override
     public int getTextOffset()
-            throws IOException, JsonParseException
     {
         return 0;
     }
 
     @Override
     public byte[] getBinaryValue(Base64Variant b64variant)
-            throws IOException, JsonParseException
     {
         switch (type) {
             case BYTES:
@@ -414,7 +395,6 @@ public class MessagePackParser
 
     @Override
     public Number getNumberValue()
-            throws IOException, JsonParseException
     {
         switch (type) {
             case INT:
@@ -432,7 +412,6 @@ public class MessagePackParser
 
     @Override
     public int getIntValue()
-            throws IOException, JsonParseException
     {
         switch (type) {
             case INT:
@@ -450,7 +429,6 @@ public class MessagePackParser
 
     @Override
     public long getLongValue()
-            throws IOException, JsonParseException
     {
         switch (type) {
             case INT:
@@ -468,7 +446,6 @@ public class MessagePackParser
 
     @Override
     public BigInteger getBigIntegerValue()
-            throws IOException, JsonParseException
     {
         switch (type) {
             case INT:
@@ -486,7 +463,6 @@ public class MessagePackParser
 
     @Override
     public float getFloatValue()
-            throws IOException, JsonParseException
     {
         switch (type) {
             case INT:
@@ -504,11 +480,10 @@ public class MessagePackParser
 
     @Override
     public double getDoubleValue()
-            throws IOException, JsonParseException
     {
          switch (type) {
              case INT:
-                 return (double) intValue;
+                 return intValue;
             case LONG:
                 return (double) longValue;
             case DOUBLE:
@@ -522,7 +497,6 @@ public class MessagePackParser
 
     @Override
     public BigDecimal getDecimalValue()
-            throws IOException
     {
          switch (type) {
              case INT:
@@ -551,8 +525,7 @@ public class MessagePackParser
     }
 
     @Override
-    public Object getEmbeddedObject()
-            throws IOException, JsonParseException
+    public Object getEmbeddedObject() throws IOException
     {
         switch (type) {
             case BYTES:
@@ -566,7 +539,6 @@ public class MessagePackParser
 
     @Override
     public NumberType getNumberType()
-            throws IOException, JsonParseException
     {
         switch (type) {
             case INT:
@@ -637,8 +609,8 @@ public class MessagePackParser
         }
     }
 
-    @Override // since 2.17
-    public String currentName() throws IOException
+    @Override
+    public String currentName()
     {
         if (_currToken == JsonToken.START_OBJECT || _currToken == JsonToken.START_ARRAY) {
             MessagePackReadContext parent = streamReadContext.getParent();
