@@ -74,7 +74,6 @@ public class MessagePackParser
     private String stringValue;
     private BigInteger biValue;
     private MessagePackExtensionType extensionTypeValue;
-    private final boolean reuseResourceInParser;
 
     public MessagePackParser(IOContext ctxt, int features, ObjectCodec objectCodec, InputStream in)
             throws IOException
@@ -125,16 +124,11 @@ public class MessagePackParser
         DupDetector dups = Feature.STRICT_DUPLICATE_DETECTION.enabledIn(features)
                 ? DupDetector.rootDetector(this) : null;
         streamReadContext = MessagePackReadContext.createRootContext(dups);
-        this.reuseResourceInParser = reuseResourceInParser;
         if (!reuseResourceInParser) {
-            this.messageUnpacker = MessagePack.newDefaultUnpacker(input);
+            messageUnpacker = MessagePack.newDefaultUnpacker(input);
             return;
         }
-        else {
-            this.messageUnpacker = null;
-        }
 
-        MessageUnpacker messageUnpacker;
         Tuple<Object, MessageUnpacker> messageUnpackerTuple = messageUnpackerHolder.get();
         if (messageUnpackerTuple == null) {
             messageUnpacker = MessagePack.newDefaultUnpacker(input);
@@ -204,7 +198,6 @@ public class MessagePackParser
     public JsonToken nextToken()
             throws IOException, JsonParseException
     {
-        MessageUnpacker messageUnpacker = getMessageUnpacker();
         tokenPosition = messageUnpacker.getTotalReadBytes();
 
         if (streamReadContext.inObject() && _currToken != JsonToken.FIELD_NAME) {
@@ -595,7 +588,6 @@ public class MessagePackParser
     {
         try {
             if (isEnabled(JsonParser.Feature.AUTO_CLOSE_SOURCE)) {
-                MessageUnpacker messageUnpacker = getMessageUnpacker();
                 messageUnpacker.close();
             }
         }
@@ -660,19 +652,5 @@ public class MessagePackParser
             throws IOException
     {
         return currentName();
-    }
-
-    // TODO: Optimize this.
-    private MessageUnpacker getMessageUnpacker()
-    {
-        if (!reuseResourceInParser) {
-            return this.messageUnpacker;
-        }
-
-        Tuple<Object, MessageUnpacker> messageUnpackerTuple = messageUnpackerHolder.get();
-        if (messageUnpackerTuple == null) {
-            throw new IllegalStateException("messageUnpacker is null");
-        }
-        return messageUnpackerTuple.second();
     }
 }
