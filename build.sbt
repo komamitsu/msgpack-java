@@ -96,8 +96,9 @@ val buildSettings = Seq[Setting[?]](
   Test / compile    := ((Test / compile) dependsOn (Test / jcheckStyle)).value
 )
 
-val junitJupiter = "org.junit.jupiter" % "junit-jupiter"        % "5.14.4" % "test"
-val junitVintage = "org.junit.vintage" % "junit-vintage-engine" % "5.14.4" % "test"
+val junitJupiter   = "org.junit.jupiter" % "junit-jupiter"        % "5.14.4" % "test"
+val junitVintage   = "org.junit.vintage" % "junit-vintage-engine" % "5.14.4" % "test"
+val junitInterface = "com.github.sbt"    % "junit-interface"      % "0.13.3" % "test"
 
 // Project settings
 lazy val root = Project(id = "msgpack-java", base = file("."))
@@ -108,7 +109,7 @@ lazy val root = Project(id = "msgpack-java", base = file("."))
     publish         := {},
     publishLocal    := {}
   )
-  .aggregate(msgpackCore, msgpackJackson)
+  .aggregate(msgpackCore, msgpackJackson, msgpackJackson3)
 
 lazy val msgpackCore = Project(id = "msgpack-core", base = file("msgpack-core"))
   .enablePlugins(SbtOsgi)
@@ -165,6 +166,38 @@ lazy val msgpackJackson = Project(id = "msgpack-jackson", base = file("msgpack-j
         "com.fasterxml.jackson.core" % "jackson-databind" % "2.20.0",
         junitJupiter,
         junitVintage,
+        "org.apache.commons" % "commons-math3" % "3.6.1" % "test"
+      ),
+    testOptions += Tests.Argument(TestFrameworks.JUnit, "-v")
+  )
+  .dependsOn(msgpackCore)
+
+lazy val msgpackJackson3 = Project(id = "msgpack-jackson3", base = file("msgpack-jackson3"))
+  .enablePlugins(SbtOsgi)
+  .settings(
+    buildSettings,
+    name                        := "jackson-dataformat-msgpack3",
+    description                 := "Jackson 3.x extension that adds support for MessagePack",
+    OsgiKeys.bundleSymbolicName := "org.msgpack.msgpack-jackson3",
+    OsgiKeys.exportPackage      := Seq("org.msgpack.jackson", "org.msgpack.jackson.dataformat"),
+    // Jackson 3.x requires Java 17+
+    Compile / javaHome := {
+      val home = sys.env.getOrElse("JAVA17_HOME",
+        sys.env.getOrElse("JAVA_HOME",
+          sys.props.getOrElse("java.home", "")))
+      val jdk17 = file(home)
+      if (home.nonEmpty && jdk17.exists()) Some(jdk17)
+      else throw new RuntimeException("Java 17 home not found. Set JAVA17_HOME or JAVA_HOME environment variable.")
+    },
+    Test / javaHome := (Compile / javaHome).value,
+    doc / javaHome := (Compile / javaHome).value,
+    Test / fork := true,
+    javacOptions := Seq("-source", "17", "-target", "17", "-encoding", "UTF-8", "-Xlint:unchecked", "-Xlint:deprecation"),
+    doc / javacOptions := Seq("-source", "17", "-Xdoclint:none"),
+    libraryDependencies ++=
+      Seq(
+        "tools.jackson.core"    % "jackson-databind" % "3.1.2",
+        junitInterface,
         "org.apache.commons" % "commons-math3" % "3.6.1" % "test"
       ),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v")
