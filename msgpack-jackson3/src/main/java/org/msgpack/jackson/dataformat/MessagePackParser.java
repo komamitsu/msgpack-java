@@ -42,8 +42,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 
-import static org.msgpack.jackson.dataformat.JavaInfo.STRING_VALUE_FIELD_IS_CHARS;
-
 public class MessagePackParser
         extends ParserMinimalBase
 {
@@ -61,7 +59,6 @@ public class MessagePackParser
     private final IOContext ioContext;
     private ExtensionTypeCustomDeserializers extTypeCustomDesers;
     private final byte[] tempBytes = new byte[64];
-    private final char[] tempChars = new char[64];
 
     private enum Type
     {
@@ -146,19 +143,7 @@ public class MessagePackParser
         int strLen = messageUnpacker.unpackRawStringHeader();
         if (strLen <= tempBytes.length) {
             messageUnpacker.readPayload(tempBytes, 0, strLen);
-            if (STRING_VALUE_FIELD_IS_CHARS.get()) {
-                for (int i = 0; i < strLen; i++) {
-                    byte b = tempBytes[i];
-                    if ((0x80 & b) != 0) {
-                        return new String(tempBytes, 0, strLen, StandardCharsets.UTF_8);
-                    }
-                    tempChars[i] = (char) b;
-                }
-                return new String(tempChars, 0, strLen);
-            }
-            else {
-                return new String(tempBytes, 0, strLen);
-            }
+            return new String(tempBytes, 0, strLen);
         }
         else {
             byte[] bytes = messageUnpacker.readPayload(strLen);
@@ -604,12 +589,14 @@ public class MessagePackParser
     @Override
     public TokenStreamLocation currentTokenLocation()
     {
+        // columnNr repurposed as byte offset; truncates for inputs > 2 GB
         return new TokenStreamLocation(ioContext.contentReference(), tokenPosition, -1, (int) tokenPosition);
     }
 
     @Override
     public TokenStreamLocation currentLocation()
     {
+        // columnNr repurposed as byte offset; truncates for inputs > 2 GB
         return new TokenStreamLocation(ioContext.contentReference(), currentPosition, -1, (int) currentPosition);
     }
 

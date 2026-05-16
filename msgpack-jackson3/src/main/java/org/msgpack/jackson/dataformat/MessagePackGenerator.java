@@ -44,8 +44,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.msgpack.jackson.dataformat.JavaInfo.STRING_VALUE_FIELD_IS_CHARS;
-
 public class MessagePackGenerator
         extends GeneratorBase
 {
@@ -513,16 +511,6 @@ public class MessagePackGenerator
         return true;
     }
 
-    private void writeCharArrayTextKey(char[] text, int offset, int len)
-    {
-        byte[] bytes = getBytesIfAscii(text, offset, len);
-        if (bytes != null) {
-            addKeyNode(new AsciiCharString(bytes));
-            return;
-        }
-        addKeyNode(new String(text, offset, len));
-    }
-
     private void writeCharArrayTextValue(char[] text, int offset, int len) throws IOException
     {
         byte[] bytes = getBytesIfAscii(text, offset, len);
@@ -563,13 +551,7 @@ public class MessagePackGenerator
     @Override
     public JsonGenerator writeName(String name) throws JacksonException
     {
-        if (STRING_VALUE_FIELD_IS_CHARS.get()) {
-            char[] chars = name.toCharArray();
-            writeCharArrayTextKey(chars, 0, chars.length);
-        }
-        else {
-            addKeyNode(name);
-        }
+        addKeyNode(name);
         return this;
     }
 
@@ -592,13 +574,7 @@ public class MessagePackGenerator
     public JsonGenerator writeString(String text) throws JacksonException
     {
         try {
-            if (STRING_VALUE_FIELD_IS_CHARS.get()) {
-                char[] chars = text.toCharArray();
-                writeCharArrayTextValue(chars, 0, chars.length);
-            }
-            else {
-                addValueNode(text);
-            }
+            addValueNode(text);
         }
         catch (IOException e) {
             throw _wrapIOFailure(e);
@@ -673,13 +649,7 @@ public class MessagePackGenerator
     public JsonGenerator writeRaw(String text) throws JacksonException
     {
         try {
-            if (STRING_VALUE_FIELD_IS_CHARS.get()) {
-                char[] chars = text.toCharArray();
-                writeCharArrayTextValue(chars, 0, chars.length);
-            }
-            else {
-                addValueNode(text);
-            }
+            addValueNode(text);
         }
         catch (IOException e) {
             throw _wrapIOFailure(e);

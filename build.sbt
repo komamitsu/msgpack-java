@@ -180,6 +180,7 @@ lazy val msgpackJackson3 = Project(id = "msgpack-jackson3", base = file("msgpack
     description                 := "Jackson 3.x extension that adds support for MessagePack",
     OsgiKeys.bundleSymbolicName := "org.msgpack.msgpack-jackson3",
     OsgiKeys.exportPackage      := Seq("org.msgpack.jackson", "org.msgpack.jackson.dataformat"),
+    OsgiKeys.importPackage      := Seq("!android.os", "!sun.*"),
     Test / fork    := true,
     javacOptions   := Seq("-source", "17", "-target", "17"),
     doc / javacOptions := Seq("-source", "17", "-Xdoclint:none"),
