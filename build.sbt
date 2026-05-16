@@ -180,19 +180,8 @@ lazy val msgpackJackson3 = Project(id = "msgpack-jackson3", base = file("msgpack
     description                 := "Jackson 3.x extension that adds support for MessagePack",
     OsgiKeys.bundleSymbolicName := "org.msgpack.msgpack-jackson3",
     OsgiKeys.exportPackage      := Seq("org.msgpack.jackson", "org.msgpack.jackson.dataformat"),
-    // Jackson 3.x requires Java 17+
-    Compile / javaHome := {
-      val home = sys.env.getOrElse("JAVA17_HOME",
-        sys.env.getOrElse("JAVA_HOME",
-          sys.props.getOrElse("java.home", "")))
-      val jdk17 = file(home)
-      if (home.nonEmpty && jdk17.exists()) Some(jdk17)
-      else throw new RuntimeException("Java 17 home not found. Set JAVA17_HOME or JAVA_HOME environment variable.")
-    },
-    Test / javaHome := (Compile / javaHome).value,
-    doc / javaHome := (Compile / javaHome).value,
-    Test / fork := true,
-    javacOptions := Seq("-source", "17", "-target", "17", "-encoding", "UTF-8", "-Xlint:unchecked", "-Xlint:deprecation"),
+    Test / fork    := true,
+    javacOptions   := Seq("-source", "17", "-target", "17"),
     doc / javacOptions := Seq("-source", "17", "-Xdoclint:none"),
     libraryDependencies ++=
       Seq(
