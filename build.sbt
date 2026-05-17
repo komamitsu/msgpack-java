@@ -181,7 +181,7 @@ lazy val msgpackJackson = Project(id = "msgpack-jackson", base = file("msgpack-j
   .dependsOn(msgpackCore)
 
 lazy val msgpackJackson3 = Project(id = "msgpack-jackson3", base = file("msgpack-jackson3"))
-  .enablePlugins(SbtOsgi)
+  .enablePlugins(SbtOsgi, JmhPlugin)
   .settings(
     buildSettings,
     name                        := "jackson-dataformat-msgpack3",
@@ -194,10 +194,13 @@ lazy val msgpackJackson3 = Project(id = "msgpack-jackson3", base = file("msgpack
     doc / javacOptions := Seq("-source", "17", "-Xdoclint:none"),
     libraryDependencies ++=
       Seq(
-        "tools.jackson.core"    % "jackson-databind" % "3.1.2",
-        junitInterface,
-        "org.apache.commons" % "commons-math3" % "3.6.1" % "test"
+        "tools.jackson.core" % "jackson-databind" % "3.1.2",
+        junitInterface
       ),
-    testOptions += Tests.Argument(TestFrameworks.JUnit, "-v")
+    testOptions += Tests.Argument(TestFrameworks.JUnit, "-v"),
+    Jmh / javaOptions ++= Seq(
+      "--add-opens=java.base/java.nio=ALL-UNNAMED",
+      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
+    )
   )
   .dependsOn(msgpackCore)
