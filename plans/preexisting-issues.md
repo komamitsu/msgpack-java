@@ -16,12 +16,11 @@ calling `super.close()` (which would unconditionally close the underlying stream
 
 Fixed: `snapshot()` now delegates to `copy()`, and `rebuild()` is implemented via `MessagePackFactoryBuilder`.
 
-### 3. Build: `msgpack-jackson3` fails to compile locally on Java < 17
+### 3. Build: `msgpack-jackson3` fails to compile locally on Java < 17 — FIXED
 
-`msgpack-jackson3` is in the root aggregate unconditionally. The CI works around
-this with a bash version check, but a developer running `./sbt test` locally on
-Java 8 or 11 gets a hard compilation failure. A cleaner build-level solution
-(conditional aggregate, toolchain support, or a separate profile) is needed.
+`build.sbt` conditionally includes `msgpack-jackson3` in the root aggregate only when
+running on Java 17+. Developers on older JDKs and CI on older JDK matrix entries
+skip the module cleanly.
 
 ### 4. `MessagePackGenerator.streamWriteContext()` returns null — FIXED
 
