@@ -352,6 +352,29 @@ public class MessagePackGeneratorTest
     }
 
     @Test
+    public void testBigDecimalCompareTo()
+            throws IOException
+    {
+        ObjectMapper mapper = new MessagePackMapper(new MessagePackFactory());
+
+        // BigDecimal with trailing zeros is representable as double — must not throw
+        BigDecimal trailingZeros = new BigDecimal("1.50");
+        byte[] bytes = mapper.writeValueAsBytes(trailingZeros);
+        MessageUnpacker unpacker = MessagePack.newDefaultUnpacker(bytes);
+        assertEquals(1.5, unpacker.unpackDouble(), 0.0);
+
+        // BigDecimal with precision beyond double range must throw
+        BigDecimal tooHighPrecision = new BigDecimal("1.00000000000000000000000000000000000001");
+        try {
+            mapper.writeValueAsBytes(tooHighPrecision);
+            assertTrue(false);
+        }
+        catch (IllegalArgumentException e) {
+            assertTrue(true);
+        }
+    }
+
+    @Test
     public void testEnableFeatureAutoCloseTarget()
             throws IOException
     {
