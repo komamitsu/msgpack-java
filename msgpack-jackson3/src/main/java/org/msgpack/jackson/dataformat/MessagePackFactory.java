@@ -75,6 +75,16 @@ public class MessagePackFactory
         }
     }
 
+    protected MessagePackFactory(MessagePackFactoryBuilder b)
+    {
+        super(b);
+        this.packerConfig = b.packerConfig().clone();
+        this.reuseResourceInGenerator = b.reuseResourceInGenerator();
+        this.reuseResourceInParser = b.reuseResourceInParser();
+        this.supportIntegerKeys = b.supportIntegerKeys();
+        this.extTypeCustomDesers = b.extTypeCustomDesers();
+    }
+
     public MessagePackFactory setReuseResourceInGenerator(boolean reuseResourceInGenerator)
     {
         this.reuseResourceInGenerator = reuseResourceInGenerator;
@@ -172,7 +182,7 @@ public class MessagePackFactory
     @Override
     public TSFBuilder<?, ?> rebuild()
     {
-        throw new UnsupportedOperationException("MessagePackFactory does not support TSFBuilder yet");
+        return new MessagePackFactoryBuilder(this);
     }
 
     @Override
@@ -188,9 +198,21 @@ public class MessagePackFactory
     }
 
     @VisibleForTesting
+    boolean isReuseResourceInGenerator()
+    {
+        return reuseResourceInGenerator;
+    }
+
+    @VisibleForTesting
     boolean isReuseResourceInParser()
     {
         return reuseResourceInParser;
+    }
+
+    @VisibleForTesting
+    boolean isSupportIntegerKeys()
+    {
+        return supportIntegerKeys;
     }
 
     @VisibleForTesting

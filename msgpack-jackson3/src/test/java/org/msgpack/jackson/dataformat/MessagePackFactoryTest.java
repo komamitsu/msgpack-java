@@ -18,6 +18,7 @@ package org.msgpack.jackson.dataformat;
 import tools.jackson.core.JsonEncoding;
 import tools.jackson.core.JsonGenerator;
 import tools.jackson.core.JsonParser;
+import tools.jackson.core.TSFBuilder;
 import tools.jackson.core.TokenStreamFactory;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
@@ -30,8 +31,10 @@ import java.util.Map;
 
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.hamcrest.CoreMatchers.nullValue;
+import static org.hamcrest.CoreMatchers.sameInstance;
 import static org.junit.Assert.assertEquals;
 import static org.hamcrest.MatcherAssert.assertThat;
 
@@ -84,6 +87,62 @@ public class MessagePackFactoryTest
             .readValue(objectMapper.writeValueAsBytes(map), new TypeReference<Map<String, Integer>>() {});
         assertThat(deserialized.size(), is(1));
         assertThat(deserialized.get("one"), is(1));
+    }
+
+    @Test
+    public void testRebuildWithDefaultConfig()
+            throws IOException
+    {
+        MessagePackFactory messagePackFactory = new MessagePackFactory();
+        TSFBuilder<?, ?> builder = messagePackFactory.rebuild();
+        assertThat(builder, is(instanceOf(MessagePackFactoryBuilder.class)));
+
+        MessagePackFactory rebuilt = (MessagePackFactory) builder.build();
+        assertThat(rebuilt, is(not(sameInstance(messagePackFactory))));
+        assertThat(rebuilt.getPackerConfig().isStr8FormatSupport(), is(true));
+        assertThat(rebuilt.getExtTypeCustomDesers(), is(nullValue()));
+
+        ObjectMapper rebuiltObjectMapper = new MessagePackMapper(rebuilt);
+        byte[] bytes = rebuiltObjectMapper.writeValueAsBytes(42);
+        assertThat(rebuiltObjectMapper.readValue(bytes, Integer.class), is(42));
+    }
+
+    @Test
+    public void testRebuildWithAdvancedConfig()
+            throws IOException
+    {
+        ExtensionTypeCustomDeserializers extTypeCustomDesers = new ExtensionTypeCustomDeserializers();
+        extTypeCustomDesers.addCustomDeser((byte) 42,
+                new ExtensionTypeCustomDeserializers.Deser()
+                {
+                    @Override
+                    public Object deserialize(byte[] data)
+                            throws IOException
+                    {
+                        TinyPojo pojo = new TinyPojo();
+                        pojo.t = new String(data);
+                        return pojo;
+                    }
+                }
+        );
+        MessagePack.PackerConfig packerConfig = new MessagePack.PackerConfig().withStr8FormatSupport(false);
+        MessagePackFactory messagePackFactory = new MessagePackFactory(packerConfig);
+        messagePackFactory.setExtTypeCustomDesers(extTypeCustomDesers);
+
+        MessagePackFactory rebuilt = (MessagePackFactory) messagePackFactory.rebuild().build();
+        assertThat(rebuilt, is(not(sameInstance(messagePackFactory))));
+        assertThat(rebuilt.getPackerConfig().isStr8FormatSupport(), is(false));
+        assertThat(rebuilt.getExtTypeCustomDesers().getDeser((byte) 42), is(notNullValue()));
+        assertThat(rebuilt.getExtTypeCustomDesers().getDeser((byte) 43), is(nullValue()));
+    }
+
+    @Test
+    public void testSnapshotReturnsNewInstance()
+    {
+        MessagePackFactory messagePackFactory = new MessagePackFactory();
+        TokenStreamFactory snapshot = messagePackFactory.snapshot();
+        assertThat(snapshot, is(not(sameInstance(messagePackFactory))));
+        assertThat(snapshot, is(instanceOf(MessagePackFactory.class)));
     }
 
     @Test
