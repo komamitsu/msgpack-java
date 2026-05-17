@@ -101,6 +101,11 @@ val junitVintage   = "org.junit.vintage" % "junit-vintage-engine" % "5.14.4" % "
 val junitInterface = "com.github.sbt"    % "junit-interface"      % "0.13.3" % "test"
 
 // Project settings
+val isJava17Plus: Boolean = {
+  val v = sys.props.getOrElse("java.specification.version", "1.8")
+  if (v.startsWith("1.")) false else scala.util.Try(v.toInt >= 17).getOrElse(false)
+}
+
 lazy val root = Project(id = "msgpack-java", base = file("."))
   .settings(
     buildSettings,
@@ -109,7 +114,10 @@ lazy val root = Project(id = "msgpack-java", base = file("."))
     publish         := {},
     publishLocal    := {}
   )
-  .aggregate(msgpackCore, msgpackJackson, msgpackJackson3)
+  .aggregate(
+    Seq[ProjectReference](msgpackCore, msgpackJackson) ++
+      (if (isJava17Plus) Seq[ProjectReference](msgpackJackson3) else Nil): _*
+  )
 
 lazy val msgpackCore = Project(id = "msgpack-core", base = file("msgpack-core"))
   .enablePlugins(SbtOsgi)
