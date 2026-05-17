@@ -166,7 +166,7 @@ public class MessagePackFactory
     @Override
     public TokenStreamFactory snapshot()
     {
-        return this;
+        return copy();
     }
 
     @Override
