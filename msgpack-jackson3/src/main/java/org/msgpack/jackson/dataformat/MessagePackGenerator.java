@@ -29,7 +29,6 @@ import tools.jackson.core.base.GeneratorBase;
 import tools.jackson.core.io.IOContext;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessagePacker;
-import org.msgpack.core.annotations.Nullable;
 import org.msgpack.core.buffer.MessageBufferOutput;
 import org.msgpack.core.buffer.OutputStreamBufferOutput;
 
@@ -40,15 +39,12 @@ import java.io.Reader;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
 public class MessagePackGenerator
         extends GeneratorBase
 {
-    private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
     private static final int IN_ROOT = 0;
     private static final int IN_OBJECT = 1;
     private static final int IN_ARRAY = 2;
@@ -64,11 +60,11 @@ public class MessagePackGenerator
     private boolean isElementsClosed = false;
     private SimpleStreamWriteContext writeContext;
 
-    private static final class AsciiCharString
+    private static final class RawUtf8String
     {
         public final byte[] bytes;
 
-        public AsciiCharString(byte[] bytes)
+        public RawUtf8String(byte[] bytes)
         {
             this.bytes = bytes;
         }
@@ -364,8 +360,8 @@ public class MessagePackGenerator
         if (v instanceof String) {
             messagePacker.packString((String) v);
         }
-        else if (v instanceof AsciiCharString) {
-            byte[] bytes = ((AsciiCharString) v).bytes;
+        else if (v instanceof RawUtf8String) {
+            byte[] bytes = ((RawUtf8String) v).bytes;
             messagePacker.packRawStringHeader(bytes.length);
             messagePacker.writePayload(bytes);
         }
@@ -494,49 +490,16 @@ public class MessagePackGenerator
         }
     }
 
-    @Nullable
-    private byte[] getBytesIfAscii(char[] chars, int offset, int len)
-    {
-        byte[] bytes = new byte[len];
-        for (int i = offset; i < offset + len; i++) {
-            char c = chars[i];
-            if (c >= 0x80) {
-                return null;
-            }
-            bytes[i - offset] = (byte) c;
-        }
-        return bytes;
-    }
-
-    private boolean areAllAsciiBytes(byte[] bytes, int offset, int len)
-    {
-        for (int i = offset; i < offset + len; i++) {
-            if ((bytes[i] & 0x80) != 0) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     private void writeCharArrayTextValue(char[] text, int offset, int len) throws IOException
     {
-        byte[] bytes = getBytesIfAscii(text, offset, len);
-        if (bytes != null) {
-            addValueNode(new AsciiCharString(bytes));
-            return;
-        }
         addValueNode(new String(text, offset, len));
     }
 
     private void writeByteArrayTextValue(byte[] text, int offset, int len) throws IOException
     {
-        if (areAllAsciiBytes(text, offset, len)) {
-            byte[] slice = new byte[len];
-            System.arraycopy(text, offset, slice, 0, len);
-            addValueNode(new AsciiCharString(slice));
-            return;
-        }
-        addValueNode(new String(text, offset, len, DEFAULT_CHARSET));
+        byte[] slice = new byte[len];
+        System.arraycopy(text, offset, slice, 0, len);
+        addValueNode(new RawUtf8String(slice));
     }
 
     @Override
@@ -613,9 +576,7 @@ public class MessagePackGenerator
                 while ((read = reader.read(tmpBuf)) >= 0) {
                     sb.append(tmpBuf, 0, read);
                 }
-                char[] chars = new char[sb.length()];
-                sb.getChars(0, chars.length, chars, 0);
-                writeCharArrayTextValue(chars, 0, chars.length);
+                addValueNode(sb.toString());
             }
             else {
                 char[] buf = new char[len];
@@ -682,9 +643,7 @@ public class MessagePackGenerator
     public JsonGenerator writeRaw(String text, int offset, int len) throws JacksonException
     {
         try {
-            char[] chars = new char[len];
-            text.getChars(offset, offset + len, chars, 0);
-            writeCharArrayTextValue(chars, 0, len);
+            addValueNode(text.substring(offset, offset + len));
         }
         catch (IOException e) {
             throw _wrapIOFailure(e);
