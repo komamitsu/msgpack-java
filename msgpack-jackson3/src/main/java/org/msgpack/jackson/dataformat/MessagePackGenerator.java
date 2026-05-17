@@ -390,7 +390,7 @@ public class MessagePackGenerator
             int len = bb.remaining();
             if (bb.hasArray()) {
                 messagePacker.packBinaryHeader(len);
-                messagePacker.writePayload(bb.array(), bb.arrayOffset(), len);
+                messagePacker.writePayload(bb.array(), bb.arrayOffset() + bb.position(), len);
             }
             else {
                 byte[] data = new byte[len];
@@ -496,7 +496,7 @@ public class MessagePackGenerator
             if (c >= 0x80) {
                 return null;
             }
-            bytes[i] = (byte) c;
+            bytes[i - offset] = (byte) c;
         }
         return bytes;
     }
@@ -524,7 +524,9 @@ public class MessagePackGenerator
     private void writeByteArrayTextValue(byte[] text, int offset, int len) throws IOException
     {
         if (areAllAsciiBytes(text, offset, len)) {
-            addValueNode(new AsciiCharString(text));
+            byte[] slice = new byte[len];
+            System.arraycopy(text, offset, slice, 0, len);
+            addValueNode(new AsciiCharString(slice));
             return;
         }
         addValueNode(new String(text, offset, len, DEFAULT_CHARSET));
