@@ -962,7 +962,7 @@ public class MessagePackGeneratorTest
             throws IOException
     {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        JsonGenerator generator = factory.createGenerator(baos, JsonEncoding.UTF8);
+        JsonGenerator generator = factory.createGenerator(ObjectWriteContext.empty(), baos);
         assertFalse(generator.isClosed());
         generator.writeStartArray();
         generator.writeEndArray();
@@ -975,7 +975,7 @@ public class MessagePackGeneratorTest
             throws IOException
     {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        JsonGenerator generator = factory.createGenerator(baos, JsonEncoding.UTF8);
+        JsonGenerator generator = factory.createGenerator(ObjectWriteContext.empty(), baos);
         generator.writeStartArray();
         generator.writeNumber(1);
         generator.writeEndArray();
@@ -1001,7 +1001,7 @@ public class MessagePackGeneratorTest
             throws IOException
     {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        JsonGenerator generator = factory.createGenerator(baos, JsonEncoding.UTF8);
+        JsonGenerator generator = factory.createGenerator(ObjectWriteContext.empty(), baos);
         generator.writeStartArray();
         generator.writeRaw("XXhelloXX", 2, 5); // "hello"
         generator.writeEndArray();
@@ -1019,7 +1019,7 @@ public class MessagePackGeneratorTest
         // Padding chars before/after the actual content to test non-zero offset
         char[] buf = new char[] {'X', 'X', 'h', 'e', 'l', 'l', 'o', 'X'};
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        JsonGenerator generator = factory.createGenerator(baos, JsonEncoding.UTF8);
+        JsonGenerator generator = factory.createGenerator(ObjectWriteContext.empty(), baos);
         generator.writeStartArray();
         generator.writeString(buf, 2, 5); // "hello"
         generator.writeEndArray();
@@ -1037,7 +1037,7 @@ public class MessagePackGeneratorTest
         // Non-ASCII to exercise the non-fast-path in getBytesIfAscii
         char[] buf = new char[] {'X', '三', '四', '五', 'X'}; // 三四五
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        JsonGenerator generator = factory.createGenerator(baos, JsonEncoding.UTF8);
+        JsonGenerator generator = factory.createGenerator(ObjectWriteContext.empty(), baos);
         generator.writeStartArray();
         generator.writeString(buf, 1, 3);
         generator.writeEndArray();
@@ -1055,7 +1055,7 @@ public class MessagePackGeneratorTest
         // Padding bytes before/after to test non-zero offset in writeUTF8String
         byte[] buf = new byte[] {'X', 'X', 'h', 'i', 'X'};
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        JsonGenerator generator = factory.createGenerator(baos, JsonEncoding.UTF8);
+        JsonGenerator generator = factory.createGenerator(ObjectWriteContext.empty(), baos);
         generator.writeStartArray();
         generator.writeUTF8String(buf, 2, 2); // "hi"
         generator.writeEndArray();
@@ -1072,7 +1072,7 @@ public class MessagePackGeneratorTest
     {
         byte[] data = new byte[] {0x00, 0x01, 0x02, 0x03, 0x04};
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        JsonGenerator generator = factory.createGenerator(baos, JsonEncoding.UTF8);
+        JsonGenerator generator = factory.createGenerator(ObjectWriteContext.empty(), baos);
         generator.writeStartArray();
         generator.writeBinary(data, 1, 3); // bytes 0x01, 0x02, 0x03
         generator.writeEndArray();
@@ -1092,7 +1092,7 @@ public class MessagePackGeneratorTest
         ByteBuffer bb = ByteBuffer.wrap(data, 1, 3); // position=1, limit=4, remaining=3
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        JsonGenerator generator = factory.createGenerator(baos, JsonEncoding.UTF8);
+        JsonGenerator generator = factory.createGenerator(ObjectWriteContext.empty(), baos);
         generator.writeStartArray();
         ObjectMapper mapper = new MessagePackMapper(factory);
         mapper.writeValue(generator, bb);
