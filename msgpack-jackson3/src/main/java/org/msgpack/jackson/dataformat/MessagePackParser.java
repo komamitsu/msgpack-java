@@ -40,7 +40,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
 
 public class MessagePackParser
         extends ParserMinimalBase
@@ -58,7 +57,6 @@ public class MessagePackParser
     private long currentPosition;
     private final IOContext ioContext;
     private ExtensionTypeCustomDeserializers extTypeCustomDesers;
-    private final byte[] tempBytes = new byte[64];
 
     private enum Type
     {
@@ -140,15 +138,7 @@ public class MessagePackParser
 
     private String unpackString(MessageUnpacker messageUnpacker) throws IOException
     {
-        int strLen = messageUnpacker.unpackRawStringHeader();
-        if (strLen <= tempBytes.length) {
-            messageUnpacker.readPayload(tempBytes, 0, strLen);
-            return new String(tempBytes, 0, strLen, StandardCharsets.UTF_8);
-        }
-        else {
-            byte[] bytes = messageUnpacker.readPayload(strLen);
-            return new String(bytes, 0, strLen, StandardCharsets.UTF_8);
-        }
+        return messageUnpacker.unpackString();
     }
 
     @Override

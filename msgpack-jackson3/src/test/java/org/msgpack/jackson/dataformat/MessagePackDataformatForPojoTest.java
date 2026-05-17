@@ -139,8 +139,8 @@ public class MessagePackDataformatForPojoTest
                 .annotationIntrospector(new JsonArrayFormat())
                 .build();
         byte[] bytes = objectMapper.writeValueAsBytes(complexPojo);
-        String scheme = new String(bytes, Charset.forName("UTF-8"));
-        assertThat(scheme, not(containsString("name")));
+        String schema = new String(bytes, Charset.forName("UTF-8"));
+        assertThat(schema, not(containsString("name")));
         ComplexPojo value = objectMapper.readValue(bytes, ComplexPojo.class);
         assertEquals("komamitsu", value.name);
         assertEquals(20, value.age);

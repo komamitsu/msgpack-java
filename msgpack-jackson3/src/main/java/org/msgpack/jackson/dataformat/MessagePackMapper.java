@@ -115,6 +115,6 @@ public class MessagePackMapper extends ObjectMapper
     @Override
     public Version version()
     {
-        return Version.unknownVersion();
+        return PackageVersion.VERSION;
     }
 }

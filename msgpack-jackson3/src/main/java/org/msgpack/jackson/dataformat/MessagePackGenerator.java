@@ -27,7 +27,6 @@ import tools.jackson.core.StreamWriteFeature;
 import tools.jackson.core.TokenStreamContext;
 import tools.jackson.core.base.GeneratorBase;
 import tools.jackson.core.io.IOContext;
-import tools.jackson.core.io.SerializedString;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessagePacker;
 import org.msgpack.core.annotations.Nullable;
@@ -569,14 +568,12 @@ public class MessagePackGenerator
     @Override
     public JsonGenerator writeName(SerializableString name) throws JacksonException
     {
-        if (name instanceof SerializedString) {
-            writeName(name.getValue());
-        }
-        else if (name instanceof MessagePackSerializedString) {
+        if (name instanceof MessagePackSerializedString) {
+            writeContext.writeName(name.getValue());
             addKeyNode(((MessagePackSerializedString) name).getRawValue());
         }
         else {
-            throw new IllegalArgumentException("Unsupported key: " + name);
+            writeName(name.getValue());
         }
         return this;
     }
