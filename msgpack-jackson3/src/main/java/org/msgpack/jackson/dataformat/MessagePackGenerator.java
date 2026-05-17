@@ -339,6 +339,7 @@ public class MessagePackGenerator
         if (currentParentElementIndex == 0) {
             isElementsClosed = true;
             currentParentElementIndex = parent.parentIndex;
+            currentState = IN_ROOT;
             return;
         }
 
@@ -881,8 +882,6 @@ public class MessagePackGenerator
     {
         try {
             flush();
-        }
-        finally {
             if (StreamWriteFeature.AUTO_CLOSE_TARGET.enabledIn(_streamWriteFeatures)) {
                 try {
                     MessagePacker messagePacker = getMessagePacker();
@@ -892,6 +891,10 @@ public class MessagePackGenerator
                     throw _wrapIOFailure(e);
                 }
             }
+        }
+        finally {
+            _closed = true;
+            _releaseBuffers();
         }
     }
 

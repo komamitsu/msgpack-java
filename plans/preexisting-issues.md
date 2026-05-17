@@ -2,14 +2,13 @@
 
 ## msgpack-jackson3-specific
 
-### 1. `isClosed()` always returns false
+### 1. `isClosed()` always returns false — FIXED
 
 **File:** `msgpack-jackson3/.../MessagePackGenerator.java` (close method)
 
-`close()` cannot call `super.close()` because `GeneratorBase.close()` in Jackson 3
-closes the underlying output stream as a side effect, breaking tests that disable
-`AUTO_CLOSE_TARGET`. As a result `isClosed()` always returns false and callers can
-continue writing into a closed generator without getting the standard exception.
+Fixed by setting `_closed = true` directly in the `finally` block of `close()`, without
+calling `super.close()` (which would unconditionally close the underlying stream via
+`_closeInput()`, ignoring the `AUTO_CLOSE_TARGET` flag).
 
 ### 2. `MessagePackFactory.snapshot()` returns `this` — FIXED
 
@@ -65,13 +64,16 @@ left off instead of from the beginning.
 retains the entire last parsed payload for each thread in a pool indefinitely, which
 can cause unbounded memory retention after large messages.
 
-## 3. `MessagePackGenerator`: `close()` does not call `super.close()`
+## 3. `MessagePackGenerator`: `close()` does not set `isClosed()` to true
 
-**File:** `msgpack-jackson/src/main/java/org/msgpack/jackson/dataformat/MessagePackGenerator.java` (close method)
+**Files:**
+- `msgpack-jackson/src/main/java/org/msgpack/jackson/dataformat/MessagePackGenerator.java` (close method)
+- `msgpack-jackson3/src/main/java/org/msgpack/jackson/dataformat/MessagePackGenerator.java` — FIXED
 
-The `close()` override never delegates to `GeneratorBase.close()`, so `isClosed()`
-remains false after close. Callers can continue writing into a closed generator
-instead of getting the standard closed-generator exception.
+The `close()` override never sets the closed flag, so `isClosed()` remains false.
+Fixed in msgpack-jackson3 by setting `_closed = true` directly (calling `super.close()`
+is not viable since it unconditionally closes the underlying stream, ignoring
+`AUTO_CLOSE_TARGET`). Needs the same fix in msgpack-jackson.
 
 ## 4. `MessagePackGenerator`: `writeString(Reader, int)` crashes on length -1
 
@@ -90,10 +92,14 @@ should try integer parsing first.
 
 ## 6. `MessagePackGenerator`: Closing a container leaves stale `currentState`
 
-**File:** `msgpack-jackson/src/main/java/org/msgpack/jackson/dataformat/MessagePackGenerator.java` (writeEndArray/writeEndObject)
+**Files:**
+- `msgpack-jackson/src/main/java/org/msgpack/jackson/dataformat/MessagePackGenerator.java` (writeEndArray/writeEndObject)
+- `msgpack-jackson3/src/main/java/org/msgpack/jackson/dataformat/MessagePackGenerator.java` — FIXED
 
-After `flush()` clears `nodes`, any subsequent root-level value written with the
-same generator is treated as if inside the old container, which can corrupt output.
+After closing the root container, `currentState` was not reset to `IN_ROOT`. After
+`flush()` clears `nodes`, any subsequent root-level value was treated as if inside the
+old container. Fixed in msgpack-jackson3 by adding `currentState = IN_ROOT` in
+`endCurrentContainer()`; needs the same fix in msgpack-jackson.
 
 ## 7. `MessagePackSerializedString`: Most interface methods are stubs
 

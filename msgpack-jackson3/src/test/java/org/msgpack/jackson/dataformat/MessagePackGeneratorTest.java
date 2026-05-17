@@ -958,6 +958,45 @@ public class MessagePackGeneratorTest
     }
 
     @Test
+    public void testIsClosedAfterClose()
+            throws IOException
+    {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        JsonGenerator generator = factory.createGenerator(baos, JsonEncoding.UTF8);
+        assertFalse(generator.isClosed());
+        generator.writeStartArray();
+        generator.writeEndArray();
+        generator.close();
+        assertTrue(generator.isClosed());
+    }
+
+    @Test
+    public void testGeneratorReusableAfterRootContainerClose()
+            throws IOException
+    {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        JsonGenerator generator = factory.createGenerator(baos, JsonEncoding.UTF8);
+        generator.writeStartArray();
+        generator.writeNumber(1);
+        generator.writeEndArray();
+        generator.flush();
+
+        // Write a second root value; currentState must have reset to IN_ROOT
+        generator.writeStartObject();
+        generator.writeName("k");
+        generator.writeNumber(2);
+        generator.writeEndObject();
+        generator.close();
+
+        MessageUnpacker unpacker = MessagePack.newDefaultUnpacker(baos.toByteArray());
+        assertEquals(1, unpacker.unpackArrayHeader());
+        assertEquals(1, unpacker.unpackInt());
+        assertEquals(1, unpacker.unpackMapHeader());
+        assertEquals("k", unpacker.unpackString());
+        assertEquals(2, unpacker.unpackInt());
+    }
+
+    @Test
     public void testWriteStringCharArrayWithOffset()
             throws IOException
     {
