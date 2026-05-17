@@ -677,8 +677,9 @@ public class MessagePackGenerator
     public JsonGenerator writeRaw(String text, int offset, int len) throws JacksonException
     {
         try {
-            char[] chars = text.toCharArray();
-            writeCharArrayTextValue(chars, offset, len);
+            char[] chars = new char[len];
+            text.getChars(offset, offset + len, chars, 0);
+            writeCharArrayTextValue(chars, 0, len);
         }
         catch (IOException e) {
             throw _wrapIOFailure(e);

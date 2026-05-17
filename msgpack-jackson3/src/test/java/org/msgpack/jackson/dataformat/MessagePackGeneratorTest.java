@@ -997,6 +997,22 @@ public class MessagePackGeneratorTest
     }
 
     @Test
+    public void testWriteRawStringWithOffset()
+            throws IOException
+    {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        JsonGenerator generator = factory.createGenerator(baos, JsonEncoding.UTF8);
+        generator.writeStartArray();
+        generator.writeRaw("XXhelloXX", 2, 5); // "hello"
+        generator.writeEndArray();
+        generator.close();
+
+        MessageUnpacker unpacker = MessagePack.newDefaultUnpacker(baos.toByteArray());
+        unpacker.unpackArrayHeader();
+        assertEquals("hello", unpacker.unpackString());
+    }
+
+    @Test
     public void testWriteStringCharArrayWithOffset()
             throws IOException
     {
