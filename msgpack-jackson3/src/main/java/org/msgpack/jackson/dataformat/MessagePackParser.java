@@ -143,7 +143,7 @@ public class MessagePackParser
         int strLen = messageUnpacker.unpackRawStringHeader();
         if (strLen <= tempBytes.length) {
             messageUnpacker.readPayload(tempBytes, 0, strLen);
-            return new String(tempBytes, 0, strLen);
+            return new String(tempBytes, 0, strLen, StandardCharsets.UTF_8);
         }
         else {
             byte[] bytes = messageUnpacker.readPayload(strLen);

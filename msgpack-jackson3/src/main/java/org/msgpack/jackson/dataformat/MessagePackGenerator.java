@@ -598,16 +598,29 @@ public class MessagePackGenerator
     public JsonGenerator writeString(Reader reader, int len) throws JacksonException
     {
         try {
-            char[] buf = new char[len];
-            int totalRead = 0;
-            while (totalRead < len) {
-                int read = reader.read(buf, totalRead, len - totalRead);
-                if (read < 0) {
-                    break;
+            if (len < 0) {
+                StringBuilder sb = new StringBuilder();
+                char[] tmpBuf = new char[1024];
+                int read;
+                while ((read = reader.read(tmpBuf)) >= 0) {
+                    sb.append(tmpBuf, 0, read);
                 }
-                totalRead += read;
+                char[] chars = new char[sb.length()];
+                sb.getChars(0, chars.length, chars, 0);
+                writeCharArrayTextValue(chars, 0, chars.length);
             }
-            writeCharArrayTextValue(buf, 0, totalRead);
+            else {
+                char[] buf = new char[len];
+                int totalRead = 0;
+                while (totalRead < len) {
+                    int read = reader.read(buf, totalRead, len - totalRead);
+                    if (read < 0) {
+                        break;
+                    }
+                    totalRead += read;
+                }
+                writeCharArrayTextValue(buf, 0, totalRead);
+            }
         }
         catch (IOException e) {
             throw _wrapIOFailure(e);
@@ -797,16 +810,16 @@ public class MessagePackGenerator
             }
 
             try {
-                double d = Double.parseDouble(encodedValue);
-                addValueNode(d);
+                BigInteger bi = new BigInteger(encodedValue);
+                addValueNode(bi);
                 return this;
             }
             catch (NumberFormatException ignored) {
             }
 
             try {
-                BigInteger bi = new BigInteger(encodedValue);
-                addValueNode(bi);
+                double d = Double.parseDouble(encodedValue);
+                addValueNode(d);
                 return this;
             }
             catch (NumberFormatException ignored) {

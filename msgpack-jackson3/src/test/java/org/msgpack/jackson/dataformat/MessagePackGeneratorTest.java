@@ -881,8 +881,8 @@ public class MessagePackGeneratorTest
 
         BigDecimal bd = BigDecimal.valueOf(Long.MAX_VALUE).add(BigDecimal.ONE);
         assertThat(
-            MessagePack.newDefaultUnpacker(objectMapper.writeValueAsBytes(bd)).unpackDouble(),
-                is(bd.doubleValue()));
+            MessagePack.newDefaultUnpacker(objectMapper.writeValueAsBytes(bd)).unpackBigInteger(),
+                is(bd.toBigIntegerExact()));
     }
 
     public static class BigIntegerSerializerStoringAsString
@@ -906,8 +906,8 @@ public class MessagePackGeneratorTest
 
         BigInteger bi = BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE);
         assertThat(
-            MessagePack.newDefaultUnpacker(objectMapper.writeValueAsBytes(bi)).unpackDouble(),
-                is(bi.doubleValue()));
+            MessagePack.newDefaultUnpacker(objectMapper.writeValueAsBytes(bi)).unpackBigInteger(),
+                is(bi));
     }
 
     @Test
