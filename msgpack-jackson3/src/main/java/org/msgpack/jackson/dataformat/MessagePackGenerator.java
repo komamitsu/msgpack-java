@@ -18,11 +18,13 @@ package org.msgpack.jackson.dataformat;
 import tools.jackson.core.Base64Variant;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.util.JacksonFeatureSet;
+import tools.jackson.core.util.SimpleStreamWriteContext;
 import tools.jackson.core.JsonGenerator;
 import tools.jackson.core.ObjectWriteContext;
 import tools.jackson.core.SerializableString;
 import tools.jackson.core.StreamWriteCapability;
 import tools.jackson.core.StreamWriteFeature;
+import tools.jackson.core.TokenStreamContext;
 import tools.jackson.core.base.GeneratorBase;
 import tools.jackson.core.io.IOContext;
 import tools.jackson.core.io.SerializedString;
@@ -61,6 +63,7 @@ public class MessagePackGenerator
     private int currentState = IN_ROOT;
     private final List<Node> nodes;
     private boolean isElementsClosed = false;
+    private SimpleStreamWriteContext writeContext;
 
     private static final class AsciiCharString
     {
@@ -201,6 +204,7 @@ public class MessagePackGenerator
         this.packerConfig = packerConfig;
         this.nodes = new ArrayList<>();
         this.supportIntegerKeys = supportIntegerKeys;
+        this.writeContext = SimpleStreamWriteContext.createRootContext(null);
     }
 
     public MessagePackGenerator(
@@ -219,6 +223,7 @@ public class MessagePackGenerator
         this.packerConfig = packerConfig;
         this.nodes = new ArrayList<>();
         this.supportIntegerKeys = supportIntegerKeys;
+        this.writeContext = SimpleStreamWriteContext.createRootContext(null);
     }
 
     private MessageBufferOutput getMessageBufferOutputForOutputStream(
@@ -270,6 +275,7 @@ public class MessagePackGenerator
     @Override
     public JsonGenerator writeStartArray(Object currentValue, int size) throws JacksonException
     {
+        writeContext = writeContext.createChildArrayContext(currentValue);
         if (currentState == IN_OBJECT) {
             Node node = nodes.get(nodes.size() - 1);
             assert node instanceof NodeEntryInObject;
@@ -309,6 +315,7 @@ public class MessagePackGenerator
     @Override
     public JsonGenerator writeStartObject(Object forValue, int size) throws JacksonException
     {
+        writeContext = writeContext.createChildObjectContext(forValue);
         if (currentState == IN_OBJECT) {
             Node node = nodes.get(nodes.size() - 1);
             assert node instanceof NodeEntryInObject;
@@ -335,6 +342,7 @@ public class MessagePackGenerator
 
     private void endCurrentContainer()
     {
+        writeContext = writeContext.clearAndGetParent();
         Node parent = nodes.get(currentParentElementIndex);
         if (currentParentElementIndex == 0) {
             isElementsClosed = true;
@@ -553,6 +561,7 @@ public class MessagePackGenerator
     @Override
     public JsonGenerator writeName(String name) throws JacksonException
     {
+        writeContext.writeName(name);
         addKeyNode(name);
         return this;
     }
@@ -953,13 +962,13 @@ public class MessagePackGenerator
     @Override
     public tools.jackson.core.Version version()
     {
-        return tools.jackson.core.Version.unknownVersion();
+        return PackageVersion.VERSION;
     }
 
     @Override
-    public tools.jackson.core.TokenStreamContext streamWriteContext()
+    public TokenStreamContext streamWriteContext()
     {
-        return null;
+        return writeContext;
     }
 
     @Override
@@ -977,12 +986,13 @@ public class MessagePackGenerator
     @Override
     public Object currentValue()
     {
-        return null;
+        return writeContext.currentValue();
     }
 
     @Override
     public void assignCurrentValue(Object v)
     {
+        writeContext.assignCurrentValue(v);
     }
 
     @Override
@@ -999,6 +1009,7 @@ public class MessagePackGenerator
     @Override
     protected void _verifyValueWrite(String typeMsg) throws JacksonException
     {
+        writeContext.writeValue();
     }
 
     private MessagePacker getMessagePacker()

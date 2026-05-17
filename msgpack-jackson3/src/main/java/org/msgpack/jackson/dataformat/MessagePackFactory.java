@@ -188,7 +188,7 @@ public class MessagePackFactory
     @Override
     public Version version()
     {
-        return Version.unknownVersion();
+        return PackageVersion.VERSION;
     }
 
     @VisibleForTesting

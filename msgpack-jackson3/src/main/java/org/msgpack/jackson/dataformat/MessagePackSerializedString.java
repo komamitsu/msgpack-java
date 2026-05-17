@@ -17,6 +17,7 @@ package org.msgpack.jackson.dataformat;
 
 import tools.jackson.core.SerializableString;
 
+import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
@@ -66,49 +67,75 @@ public class MessagePackSerializedString
     @Override
     public int appendQuotedUTF8(byte[] bytes, int i)
     {
-        return 0;
+        byte[] utf8 = asQuotedUTF8();
+        System.arraycopy(utf8, 0, bytes, i, utf8.length);
+        return utf8.length;
     }
 
     @Override
     public int appendQuoted(char[] chars, int i)
     {
-        return 0;
+        char[] q = asQuotedChars();
+        System.arraycopy(q, 0, chars, i, q.length);
+        return q.length;
     }
 
     @Override
     public int appendUnquotedUTF8(byte[] bytes, int i)
     {
-        return 0;
+        byte[] utf8 = asUnquotedUTF8();
+        System.arraycopy(utf8, 0, bytes, i, utf8.length);
+        return utf8.length;
     }
 
     @Override
     public int appendUnquoted(char[] chars, int i)
     {
-        return 0;
+        String v = getValue();
+        v.getChars(0, v.length(), chars, i);
+        return v.length();
     }
 
     @Override
     public int writeQuotedUTF8(OutputStream outputStream)
     {
-        return 0;
+        try {
+            byte[] utf8 = asQuotedUTF8();
+            outputStream.write(utf8);
+            return utf8.length;
+        }
+        catch (IOException e) {
+            return -1;
+        }
     }
 
     @Override
     public int writeUnquotedUTF8(OutputStream outputStream)
     {
-        return 0;
+        try {
+            byte[] utf8 = asUnquotedUTF8();
+            outputStream.write(utf8);
+            return utf8.length;
+        }
+        catch (IOException e) {
+            return -1;
+        }
     }
 
     @Override
     public int putQuotedUTF8(ByteBuffer byteBuffer)
     {
-        return 0;
+        byte[] utf8 = asQuotedUTF8();
+        byteBuffer.put(utf8);
+        return utf8.length;
     }
 
     @Override
     public int putUnquotedUTF8(ByteBuffer byteBuffer)
     {
-        return 0;
+        byte[] utf8 = asUnquotedUTF8();
+        byteBuffer.put(utf8);
+        return utf8.length;
     }
 
     public Object getRawValue()

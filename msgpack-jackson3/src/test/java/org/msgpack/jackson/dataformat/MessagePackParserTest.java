@@ -1089,4 +1089,23 @@ public class MessagePackParserTest
             objectMapper.readValue(out.toByteArray(), new TypeReference<Map<String, Integer>>() {});
         });
     }
+
+    @Test
+    public void testByteArrayThreadLocalClearedAfterClose()
+            throws IOException
+    {
+        ObjectMapper objectMapper = new MessagePackMapper(new MessagePackFactory());
+
+        byte[] bytes = objectMapper.writeValueAsBytes(Arrays.asList(1, 2, 3));
+
+        // Parse once; this caches the byte array in the ThreadLocal
+        objectMapper.readValue(bytes, new TypeReference<List<Integer>>() {});
+
+        // Parse again with the same byte array instance and AUTO_CLOSE_SOURCE enabled
+        // (default). The byte array reference should have been cleared from the
+        // ThreadLocal on close, so the second parse resets the unpacker and starts
+        // from the beginning rather than continuing from the end.
+        List<Integer> result = objectMapper.readValue(bytes, new TypeReference<List<Integer>>() {});
+        assertEquals(Arrays.asList(1, 2, 3), result);
+    }
 }

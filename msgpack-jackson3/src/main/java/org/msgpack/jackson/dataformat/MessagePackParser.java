@@ -135,7 +135,7 @@ public class MessagePackParser
     @Override
     public Version version()
     {
-        return Version.unknownVersion();
+        return PackageVersion.VERSION;
     }
 
     private String unpackString(MessageUnpacker messageUnpacker) throws IOException
@@ -577,6 +577,10 @@ public class MessagePackParser
         }
         finally {
             isClosed = true;
+            Tuple<Object, MessageUnpacker> tuple = messageUnpackerHolder.get();
+            if (tuple != null && tuple.first() instanceof byte[]) {
+                messageUnpackerHolder.set(new Tuple<>(null, tuple.second()));
+            }
         }
     }
 

@@ -23,15 +23,27 @@ this with a bash version check, but a developer running `./sbt test` locally on
 Java 8 or 11 gets a hard compilation failure. A cleaner build-level solution
 (conditional aggregate, toolchain support, or a separate profile) is needed.
 
-### 4. `MessagePackGenerator.streamWriteContext()` returns null
+### 4. `MessagePackGenerator.streamWriteContext()` returns null — FIXED
 
-**File:** `msgpack-jackson3/.../MessagePackGenerator.java` (streamWriteContext method)
+**File:** `msgpack-jackson3/.../MessagePackGenerator.java`
 
-`streamWriteContext()` returns `null`, bypassing Jackson's standard write context
-management. This can cause NPEs in Jackson code paths that use the context for path
-tracking in error messages or certain serialization features. Fixing it properly
-requires integrating with Jackson 3's `TokenStreamContext` / `_streamWriteContext`
-managed by `GeneratorBase`, which needs investigation.
+Fixed by adding a `SimpleStreamWriteContext writeContext` field initialized to
+`SimpleStreamWriteContext.createRootContext(null)`. `streamWriteContext()` returns
+it; `writeStartArray/Object` push a child context; `endCurrentContainer` pops via
+`clearAndGetParent()`; `writeName` calls `writeContext.writeName(name)`;
+`_verifyValueWrite` calls `writeContext.writeValue()`. `currentValue()` and
+`assignCurrentValue()` now delegate to the write context.
+
+Also fixed in the same pass:
+- `version()` now returns `PackageVersion.VERSION` (0.9.12) in generator, parser,
+  and factory, replacing `Version.unknownVersion()`.
+
+Note: `messageBufferOutputHolder` ThreadLocal was NOT fixed here — calling
+`messageBufferOutputHolder.remove()` in `_releaseBuffers()` caused a 23% serialization
+regression by defeating the ThreadLocal caching (each close allocates a new
+`OutputStreamBufferOutput` on the next generator creation). Dropped in favour of
+accepting the minor OutputStream retention, which is only observable when a thread
+creates exactly one generator and never creates another.
 
 ### 5. `writeString(Reader, int)` len=-1 implementation allocates an extra copy
 
@@ -58,11 +70,18 @@ left off instead of from the beginning.
 
 ## 2. `MessagePackParser`: ThreadLocal retains last byte-array payload per thread
 
-**File:** `msgpack-jackson/src/main/java/org/msgpack/jackson/dataformat/MessagePackParser.java:135`
+**Files:**
+- `msgpack-jackson/src/main/java/org/msgpack/jackson/dataformat/MessagePackParser.java:135`
+- `msgpack-jackson3/src/main/java/org/msgpack/jackson/dataformat/MessagePackParser.java` — FIXED
 
 `messageUnpackerHolder` is never cleared on parser close. For byte-array inputs this
 retains the entire last parsed payload for each thread in a pool indefinitely, which
 can cause unbounded memory retention after large messages.
+
+Fixed in msgpack-jackson3: on `close()`, if the cached source is a `byte[]`, it is
+replaced with `null` in the ThreadLocal (keeping the unpacker alive for reuse but
+releasing the byte-array reference). InputStream sources are left unchanged because
+they are needed to detect same-stream reuse. Needs the same fix in msgpack-jackson.
 
 ## 3. `MessagePackGenerator`: `close()` does not set `isClosed()` to true
 
@@ -103,11 +122,15 @@ old container. Fixed in msgpack-jackson3 by adding `currentState = IN_ROOT` in
 
 ## 7. `MessagePackSerializedString`: Most interface methods are stubs
 
-**File:** `msgpack-jackson/src/main/java/org/msgpack/jackson/dataformat/MessagePackSerializedString.java:70`
+**Files:**
+- `msgpack-jackson/src/main/java/org/msgpack/jackson/dataformat/MessagePackSerializedString.java:70`
+- `msgpack-jackson3/src/main/java/org/msgpack/jackson/dataformat/MessagePackSerializedString.java` — FIXED
 
 Most `SerializableString` methods return 0 or do nothing. Any Jackson code path
 that calls these methods (e.g. for length or byte-copy operations) will silently
-produce incorrect results.
+produce incorrect results. Fixed in msgpack-jackson3 by implementing all append/write/put
+methods using the existing `asUnquotedUTF8()` / `asQuotedUTF8()` helpers.
+Needs the same fix in msgpack-jackson.
 
 ## 8. `MessagePackGenerator`: `getBytesIfAscii` writes to wrong index when offset > 0
 

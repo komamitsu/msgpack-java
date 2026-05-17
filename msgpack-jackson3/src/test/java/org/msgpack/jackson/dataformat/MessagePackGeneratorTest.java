@@ -21,6 +21,7 @@ import tools.jackson.core.JsonEncoding;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.ObjectWriteContext;
 import tools.jackson.core.StreamWriteFeature;
+import tools.jackson.core.TokenStreamContext;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.SerializationContext;
 import tools.jackson.databind.ValueSerializer;
@@ -1126,5 +1127,84 @@ public class MessagePackGeneratorTest
         unpacker.unpackArrayHeader();
         byte[] result = unpacker.readPayload(unpacker.unpackBinaryHeader());
         assertArrayEquals(new byte[] {0x01, 0x02, 0x03}, result);
+    }
+
+    @Test
+    public void testStreamWriteContext()
+            throws IOException
+    {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        JsonGenerator generator = factory.createGenerator(ObjectWriteContext.empty(), baos);
+
+        TokenStreamContext ctx = generator.streamWriteContext();
+        assertNotEquals(null, ctx);
+        assertTrue(ctx.inRoot());
+
+        generator.writeStartArray();
+        ctx = generator.streamWriteContext();
+        assertTrue(ctx.inArray());
+
+        generator.writeStartObject();
+        ctx = generator.streamWriteContext();
+        assertTrue(ctx.inObject());
+
+        generator.writeName("k");
+        assertEquals("k", ctx.currentName());
+
+        generator.writeNumber(1);
+        generator.writeEndObject();
+        ctx = generator.streamWriteContext();
+        assertTrue(ctx.inArray());
+
+        generator.writeEndArray();
+        ctx = generator.streamWriteContext();
+        assertTrue(ctx.inRoot());
+
+        generator.close();
+    }
+
+    @Test
+    public void testCurrentValue()
+            throws IOException
+    {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        JsonGenerator generator = factory.createGenerator(ObjectWriteContext.empty(), baos);
+
+        Object pojo = new Object();
+        generator.writeStartObject(pojo);
+        assertEquals(pojo, generator.currentValue());
+        generator.writeName("k");
+        generator.writeNumber(1);
+        generator.writeEndObject();
+        generator.close();
+    }
+
+    @Test
+    public void testVersion()
+    {
+        assertNotEquals(null, factory.version());
+        assertEquals("org.msgpack", factory.version().getGroupId());
+        assertEquals("msgpack-jackson3", factory.version().getArtifactId());
+    }
+
+    @Test
+    public void testSerializedStringMethods()
+    {
+        MessagePackSerializedString s = new MessagePackSerializedString("hello");
+
+        byte[] utf8Target = new byte[10];
+        int written = s.appendUnquotedUTF8(utf8Target, 2);
+        assertEquals(5, written);
+        assertArrayEquals(new byte[] {'h', 'e', 'l', 'l', 'o'}, Arrays.copyOfRange(utf8Target, 2, 7));
+
+        char[] charTarget = new char[10];
+        written = s.appendUnquoted(charTarget, 3);
+        assertEquals(5, written);
+        assertEquals("hello", new String(charTarget, 3, 5));
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        written = s.writeUnquotedUTF8(baos);
+        assertEquals(5, written);
+        assertArrayEquals("hello".getBytes(java.nio.charset.StandardCharsets.UTF_8), baos.toByteArray());
     }
 }
