@@ -17,10 +17,7 @@ import java.util.concurrent.TimeUnit;
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)
 @State(Scope.Thread)
-@Fork(value = 2, jvmArgsAppend = {
-        "--add-opens=java.base/java.nio=ALL-UNNAMED",
-        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
-})
+@Fork(2)
 @Warmup(iterations = 5, time = 1)
 @Measurement(iterations = 5, time = 1)
 public class MsgpackWriteBenchmark

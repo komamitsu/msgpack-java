@@ -190,8 +190,8 @@ lazy val msgpackJackson3 = Project(id = "msgpack-jackson3", base = file("msgpack
     OsgiKeys.exportPackage      := Seq("org.msgpack.jackson", "org.msgpack.jackson.dataformat"),
     OsgiKeys.importPackage      := Seq("!android.os", "!sun.*"),
     Test / fork    := true,
-    javacOptions   := Seq("-source", "17", "-target", "17"),
-    doc / javacOptions := Seq("-source", "17", "-Xdoclint:none"),
+    javacOptions   := Seq("--release", "17"),
+    doc / javacOptions := Seq("--release", "17", "-Xdoclint:none"),
     libraryDependencies ++=
       Seq(
         "tools.jackson.core" % "jackson-databind" % "3.1.2",
