@@ -6,9 +6,10 @@
 
 **File:** `msgpack-jackson3/.../MessagePackGenerator.java` (close method)
 
-Fixed by setting `_closed = true` directly in the `finally` block of `close()`, without
-calling `super.close()` (which would unconditionally close the underlying stream via
-`_closeInput()`, ignoring the `AUTO_CLOSE_TARGET` flag).
+Fixed by delegating to `super.close()` (which sets `_closed = true` and calls
+`_releaseBuffers()`). `AUTO_CLOSE_TARGET` handling was moved to `_closeInput()` so the
+base-class lifecycle is used correctly. Our `close()` override calls `flush()` first to
+drain pending nodes, then delegates the rest to `super.close()`.
 
 ### 2. `MessagePackFactory.snapshot()` returns `this` — FIXED
 
@@ -22,20 +23,36 @@ Fixed: `snapshot()` now delegates to `copy()`, and `rebuild()` is implemented vi
 running on Java 17+. Developers on older JDKs and CI on older JDK matrix entries
 skip the module cleanly.
 
-### 4. `MessagePackGenerator.streamWriteContext()` returns null — FIXED
+### 4. `MessagePackGenerator` Jackson 3 generator contract — FIXED
 
 **File:** `msgpack-jackson3/.../MessagePackGenerator.java`
 
-Fixed by adding a `SimpleStreamWriteContext writeContext` field initialized to
+Several issues fixed across two passes:
+
+**Pass 1** — `streamWriteContext()` returns null:
+Added a `SimpleStreamWriteContext writeContext` field initialized to
 `SimpleStreamWriteContext.createRootContext(null)`. `streamWriteContext()` returns
 it; `writeStartArray/Object` push a child context; `endCurrentContainer` pops via
-`clearAndGetParent()`; `writeName` calls `writeContext.writeName(name)`;
-`_verifyValueWrite` calls `writeContext.writeValue()`. `currentValue()` and
-`assignCurrentValue()` now delegate to the write context.
+`clearAndGetParent()`; `currentValue()` and `assignCurrentValue()` delegate to it.
 
 Also fixed in the same pass:
-- `version()` now returns `PackageVersion.VERSION` (0.9.12) in generator, parser,
-  and factory, replacing `Version.unknownVersion()`.
+- `version()` now returns `PackageVersion.VERSION` in generator, parser, and factory.
+
+**Pass 2** — Align with CBORGenerator pattern (reference: jackson-dataformats-binary 3.x):
+- `_verifyValueWrite`: checks return value of `writeContext.writeValue()` and calls
+  `_reportError` on failure, so writing a value inside an object without a preceding
+  property name is detected at the Jackson API level.
+- `writeName(String/SerializableString)`: checks return value of
+  `writeContext.writeName()` and calls `_reportError` when not in Object context or
+  when a name is written twice without an intervening value.
+- `writeStartArray/writeStartObject`: call `_verifyValueWrite` before creating the
+  child context, matching the CBORGenerator pattern.
+- `addValueNode`: calls `writeContext.writeValue()` to keep Jackson context state in
+  sync with our internal node-based state. This was the root cause of all `writeName`
+  failures: `GeneratorBase` does NOT auto-call `_verifyValueWrite` for abstract write
+  methods (writeString, writeNumber, etc.), so without this call `_gotPropertyId` was
+  never reset after the first `writeName`, making every subsequent `writeName` return
+  false.
 
 Note: `messageBufferOutputHolder` ThreadLocal was NOT fixed here — calling
 `messageBufferOutputHolder.remove()` in `_releaseBuffers()` caused a 23% serialization
