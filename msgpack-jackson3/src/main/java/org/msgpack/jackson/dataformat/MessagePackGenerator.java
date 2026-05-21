@@ -270,6 +270,7 @@ public class MessagePackGenerator
     @Override
     public JsonGenerator writeStartArray(Object currentValue, int size) throws JacksonException
     {
+        _verifyValueWrite("start an array");
         writeContext = writeContext.createChildArrayContext(currentValue);
         if (currentState == IN_OBJECT) {
             Node node = nodes.get(nodes.size() - 1);
@@ -310,6 +311,7 @@ public class MessagePackGenerator
     @Override
     public JsonGenerator writeStartObject(Object forValue, int size) throws JacksonException
     {
+        _verifyValueWrite("start an object");
         writeContext = writeContext.createChildObjectContext(forValue);
         if (currentState == IN_OBJECT) {
             Node node = nodes.get(nodes.size() - 1);
@@ -468,6 +470,7 @@ public class MessagePackGenerator
 
     private void addValueNode(Object value) throws IOException
     {
+        writeContext.writeValue();
         switch (currentState) {
             case IN_OBJECT: {
                 Node node = nodes.get(nodes.size() - 1);
@@ -523,7 +526,9 @@ public class MessagePackGenerator
     @Override
     public JsonGenerator writeName(String name) throws JacksonException
     {
-        writeContext.writeName(name);
+        if (!writeContext.writeName(name)) {
+            _reportError("Cannot write property name, not in Object context");
+        }
         addKeyNode(name);
         return this;
     }
@@ -532,7 +537,9 @@ public class MessagePackGenerator
     public JsonGenerator writeName(SerializableString name) throws JacksonException
     {
         if (name instanceof MessagePackSerializedString) {
-            writeContext.writeName(name.getValue());
+            if (!writeContext.writeName(name.getValue())) {
+                _reportError("Cannot write property name, not in Object context");
+            }
             addKeyNode(((MessagePackSerializedString) name).getRawValue());
         }
         else {
@@ -845,21 +852,9 @@ public class MessagePackGenerator
     @Override
     public void close() throws JacksonException
     {
-        try {
+        if (!_closed) {
             flush();
-            if (StreamWriteFeature.AUTO_CLOSE_TARGET.enabledIn(_streamWriteFeatures)) {
-                try {
-                    MessagePacker messagePacker = getMessagePacker();
-                    messagePacker.close();
-                }
-                catch (IOException e) {
-                    throw _wrapIOFailure(e);
-                }
-            }
-        }
-        finally {
-            _closed = true;
-            _releaseBuffers();
+            super.close();
         }
     }
 
@@ -954,7 +949,9 @@ public class MessagePackGenerator
     @Override
     protected void _closeInput() throws IOException
     {
-        messagePacker.close();
+        if (StreamWriteFeature.AUTO_CLOSE_TARGET.enabledIn(_streamWriteFeatures)) {
+            messagePacker.close();
+        }
     }
 
     @Override
@@ -965,7 +962,9 @@ public class MessagePackGenerator
     @Override
     protected void _verifyValueWrite(String typeMsg) throws JacksonException
     {
-        writeContext.writeValue();
+        if (!writeContext.writeValue()) {
+            _reportError("Cannot " + typeMsg + ", expecting a property name");
+        }
     }
 
     private MessagePacker getMessagePacker()
