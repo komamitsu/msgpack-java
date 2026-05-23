@@ -61,12 +61,16 @@ regression by defeating the ThreadLocal caching (each close allocates a new
 accepting the minor OutputStream retention, which is only observable when a thread
 creates exactly one generator and never creates another.
 
-### 5. `writeString(Reader, int)` len=-1 implementation allocates an extra copy
+### 5. `writeString(Reader, int)` len≥0 path allocates unbounded buffer — FIXED
 
 **File:** `msgpack-jackson3/.../MessagePackGenerator.java` (writeString(Reader, int))
 
-The len=-1 path buffers into a `StringBuilder` then copies to a `char[]`. Using a
-`CharArrayWriter` would avoid the intermediate allocation.
+The len≥0 path allocated `new char[len]` upfront — an unbounded allocation if the
+caller passed a large hint value. Fixed by switching to chunked reading (8192-char
+buffer) into a `StringBuilder`, matching the pattern already used in the len<0 branch.
+
+The len<0 path (StringBuilder + 1024-char chunk) still allocates an extra copy vs.
+`CharArrayWriter`, but the overhead is minor and not worth optimizing at this layer.
 
 ---
 
