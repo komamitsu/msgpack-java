@@ -72,6 +72,26 @@ buffer) into a `StringBuilder`, matching the pattern already used in the len<0 b
 The len<0 path (StringBuilder + 1024-char chunk) still allocates an extra copy vs.
 `CharArrayWriter`, but the overhead is minor and not worth optimizing at this layer.
 
+### 6. `writeRaw*` / `writeRawValue*` — FYI, no action needed
+
+**File:** `msgpack-jackson3/.../MessagePackGenerator.java`
+
+CBORGenerator and SmileGenerator both throw `UnsupportedOperationException` for all
+`writeRaw*` / `writeRawValue*` overloads. This was flagged in code review as something
+MessagePackGenerator should match.
+
+After investigation, the current implementation (which delegates to `addValueNode`, same
+as `writeString`) is correct and need not change:
+
+- The `writeRaw` contract requires: no escaping, no separators, content preserved
+  unchanged. All three are satisfied — MessagePack has no JSON-style escaping or
+  separators, and the text is packed verbatim via `packString`.
+- CBOR/Smile throwing is a design choice, not a technical requirement. They could
+  equally implement it as "write as a text value" — they chose to be strict instead.
+- Our lenient approach (degrade gracefully to `writeString` behaviour) is just as
+  defensible, and avoids breaking callers that use `writeRaw` as a `writeString`
+  synonym.
+
 ---
 
 ## msgpack-jackson pre-existing issues

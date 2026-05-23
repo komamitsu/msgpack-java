@@ -1207,4 +1207,46 @@ public class MessagePackGeneratorTest
         assertEquals(5, written);
         assertArrayEquals("hello".getBytes(java.nio.charset.StandardCharsets.UTF_8), baos.toByteArray());
     }
+
+    // Regression: addValueNode must call writeContext.writeValue() so that the Jackson write
+    // context resets _gotPropertyId after each value. Without it, the second writeName() in the
+    // same object finds _gotPropertyId still set from the first writeName() and returns false
+    // without updating currentName(), leaving streamWriteContext().currentName() stale.
+    @Test
+    public void testWriteContextCurrentNameIsUpdatedForEveryProperty()
+            throws IOException
+    {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        JsonGenerator generator = factory.createGenerator(ObjectWriteContext.empty(), baos);
+        generator.writeStartObject();
+
+        generator.writeName("alpha");
+        generator.writeNumber(1);
+
+        generator.writeName("beta");
+        assertEquals("beta", generator.streamWriteContext().currentName());
+        generator.writeNumber(2);
+
+        generator.writeEndObject();
+        generator.close();
+    }
+
+    // Regression: writePropertyId() must call writeContext.writeName() when supportIntegerKeys
+    // is true. Without it, streamWriteContext() never learns a name was written, so currentName()
+    // returns null and any downstream code relying on context state (e.g. duplicate-name
+    // detection, error messages) sees wrong state.
+    @Test
+    public void testWritePropertyIdUpdatesWriteContext()
+            throws IOException
+    {
+        MessagePackFactory intKeyFactory = new MessagePackFactory().setSupportIntegerKeys(true);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        JsonGenerator generator = intKeyFactory.createGenerator(ObjectWriteContext.empty(), baos);
+        generator.writeStartObject();
+        generator.writePropertyId(42L);
+        assertEquals("42", generator.streamWriteContext().currentName());
+        generator.writeString("value");
+        generator.writeEndObject();
+        generator.close();
+    }
 }
