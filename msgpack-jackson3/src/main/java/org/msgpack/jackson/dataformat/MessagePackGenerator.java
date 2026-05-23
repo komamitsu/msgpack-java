@@ -591,16 +591,19 @@ public class MessagePackGenerator
                 addValueNode(sb.toString());
             }
             else {
-                char[] buf = new char[len];
-                int totalRead = 0;
-                while (totalRead < len) {
-                    int read = reader.read(buf, totalRead, len - totalRead);
+                int chunkSize = Math.min(len, 8192);
+                StringBuilder sb = new StringBuilder(chunkSize);
+                char[] tmpBuf = new char[chunkSize];
+                int remaining = len;
+                while (remaining > 0) {
+                    int read = reader.read(tmpBuf, 0, Math.min(remaining, tmpBuf.length));
                     if (read < 0) {
                         break;
                     }
-                    totalRead += read;
+                    sb.append(tmpBuf, 0, read);
+                    remaining -= read;
                 }
-                writeCharArrayTextValue(buf, 0, totalRead);
+                addValueNode(sb.toString());
             }
         }
         catch (IOException e) {
