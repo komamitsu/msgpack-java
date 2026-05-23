@@ -470,7 +470,9 @@ public class MessagePackGenerator
 
     private void addValueNode(Object value) throws IOException
     {
-        writeContext.writeValue();
+        if (!writeContext.writeValue()) {
+            _reportError("Cannot write value: expecting a property name in Object context");
+        }
         switch (currentState) {
             case IN_OBJECT: {
                 Node node = nodes.get(nodes.size() - 1);
@@ -509,6 +511,9 @@ public class MessagePackGenerator
     public JsonGenerator writePropertyId(long id) throws JacksonException
     {
         if (this.supportIntegerKeys) {
+            if (!writeContext.writeName(String.valueOf(id))) {
+                _reportError("Cannot write property name, not in Object context");
+            }
             addKeyNode(id);
         }
         else {

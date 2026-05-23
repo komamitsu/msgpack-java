@@ -14,6 +14,7 @@ import org.msgpack.core.MessageUnpacker;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.time.Instant;
 
 public class TimestampExtensionModule
@@ -50,7 +51,7 @@ public class TimestampExtensionModule
                 }
             }
             catch (IOException e) {
-                throw new RuntimeException(e);
+                throw new UncheckedIOException(e);
             }
         }
     }
@@ -77,7 +78,7 @@ public class TimestampExtensionModule
                 }
             }
             catch (IOException e) {
-                throw new RuntimeException(e);
+                throw new UncheckedIOException(e);
             }
         }
     }

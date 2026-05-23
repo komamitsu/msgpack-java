@@ -61,13 +61,13 @@ public class MessagePackSerializedString
     @Override
     public byte[] asQuotedUTF8()
     {
-        return ("\"" + getValue() + "\"").getBytes(UTF8);
+        return asUnquotedUTF8();
     }
 
     @Override
     public int appendQuotedUTF8(byte[] bytes, int i)
     {
-        byte[] utf8 = asQuotedUTF8();
+        byte[] utf8 = asUnquotedUTF8();
         System.arraycopy(utf8, 0, bytes, i, utf8.length);
         return utf8.length;
     }
@@ -100,7 +100,7 @@ public class MessagePackSerializedString
     public int writeQuotedUTF8(OutputStream outputStream)
     {
         try {
-            byte[] utf8 = asQuotedUTF8();
+            byte[] utf8 = asUnquotedUTF8();
             outputStream.write(utf8);
             return utf8.length;
         }
@@ -125,7 +125,7 @@ public class MessagePackSerializedString
     @Override
     public int putQuotedUTF8(ByteBuffer byteBuffer)
     {
-        byte[] utf8 = asQuotedUTF8();
+        byte[] utf8 = asUnquotedUTF8();
         byteBuffer.put(utf8);
         return utf8.length;
     }
