@@ -162,7 +162,7 @@ lazy val msgpackCore = Project(id = "msgpack-core", base = file("msgpack-core"))
   )
 
 lazy val msgpackJackson = Project(id = "msgpack-jackson", base = file("msgpack-jackson"))
-  .enablePlugins(SbtOsgi)
+  .enablePlugins(SbtOsgi, JmhPlugin)
   .settings(
     buildSettings,
     name                        := "jackson-dataformat-msgpack",
@@ -171,12 +171,17 @@ lazy val msgpackJackson = Project(id = "msgpack-jackson", base = file("msgpack-j
     OsgiKeys.exportPackage      := Seq("org.msgpack.jackson", "org.msgpack.jackson.dataformat"),
     libraryDependencies ++=
       Seq(
-        "com.fasterxml.jackson.core" % "jackson-databind" % "2.20.0",
+        "com.fasterxml.jackson.core"       % "jackson-databind"        % "2.20.0",
+        "com.fasterxml.jackson.dataformat" % "jackson-dataformat-cbor" % "2.19.0",
         junitJupiter,
         junitVintage,
         "org.apache.commons" % "commons-math3" % "3.6.1" % "test"
       ),
-    testOptions += Tests.Argument(TestFrameworks.JUnit, "-v")
+    testOptions += Tests.Argument(TestFrameworks.JUnit, "-v"),
+    Jmh / javaOptions ++= Seq(
+      "--add-opens=java.base/java.nio=ALL-UNNAMED",
+      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
+    )
   )
   .dependsOn(msgpackCore)
 
@@ -194,7 +199,8 @@ lazy val msgpackJackson3 = Project(id = "msgpack-jackson3", base = file("msgpack
     doc / javacOptions := Seq("--release", "17", "-Xdoclint:none"),
     libraryDependencies ++=
       Seq(
-        "tools.jackson.core" % "jackson-databind" % "3.1.2",
+        "tools.jackson.core"       % "jackson-databind"        % "3.1.2",
+        "tools.jackson.dataformat" % "jackson-dataformat-cbor" % "3.1.3",
         junitInterface
       ),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v"),
