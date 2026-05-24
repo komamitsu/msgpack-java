@@ -1184,7 +1184,7 @@ public class MessagePackGeneratorTest
     {
         assertNotEquals(null, factory.version());
         assertEquals("org.msgpack", factory.version().getGroupId());
-        assertEquals("msgpack-jackson3", factory.version().getArtifactId());
+        assertEquals("jackson-dataformat-msgpack3", factory.version().getArtifactId());
     }
 
     @Test
