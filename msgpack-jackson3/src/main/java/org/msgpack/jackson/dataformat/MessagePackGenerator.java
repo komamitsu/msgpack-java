@@ -414,11 +414,17 @@ public class MessagePackGenerator
         else {
             messagePacker.flush();
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            MessagePackGenerator messagePackGenerator = new MessagePackGenerator(
+            try (MessagePackGenerator messagePackGenerator = new MessagePackGenerator(
                     objectWriteContext(), _ioContext, _streamWriteFeatures,
-                    outputStream, packerConfig, supportIntegerKeys);
-            objectWriteContext().writeValue(messagePackGenerator, v);
-            messagePackGenerator.flush();
+                    outputStream, packerConfig, supportIntegerKeys)) {
+                objectWriteContext().writeValue(messagePackGenerator, v);
+            }
+            // Closing the nested generator resets the shared ThreadLocal OutputStreamBufferOutput
+            // to null via _releaseBuffers(). Re-attach it to this generator's output stream.
+            OutputStreamBufferOutput bufferOutput = messageBufferOutputHolder.get();
+            if (bufferOutput != null) {
+                bufferOutput.reset(output);
+            }
             output.write(outputStream.toByteArray());
         }
     }

@@ -305,3 +305,14 @@ Needs the same fix in msgpack-jackson.
 **Practical impact:** Low. Direct ByteBuffers are uncommon in typical POJO fields, and the
 mutation is only observable if the caller inspects or reuses the buffer after serialization.
 
+## 13. `MessagePackGenerator`: nested generator not closed in `writePOJO` fallback
+
+**Files:**
+- `msgpack-jackson/src/main/java/org/msgpack/jackson/dataformat/MessagePackGenerator.java:387`
+- `msgpack-jackson3/src/main/java/org/msgpack/jackson/dataformat/MessagePackGenerator.java` — FIXED
+
+In the `writePOJO` else-branch (unrecognised type), a new `MessagePackGenerator` is created
+to serialize the nested object but never closed. Any resource cleanup in the generator's
+`close()` (e.g. flushing pending nodes, releasing the `MessagePacker`) is skipped.
+Fixed in msgpack-jackson3 using try-with-resources; needs the same fix in msgpack-jackson.
+
