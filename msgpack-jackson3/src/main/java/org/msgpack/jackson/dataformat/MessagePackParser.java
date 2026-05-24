@@ -56,6 +56,7 @@ public class MessagePackParser
     private long currentPosition;
     private final IOContext ioContext;
     private ExtensionTypeCustomDeserializers extTypeCustomDesers;
+    private final boolean ownsThreadLocalUnpacker;
 
     private enum Type
     {
@@ -97,6 +98,7 @@ public class MessagePackParser
         streamReadContext = MessagePackReadContext.createRootContext(dups);
         if (!reuseResourceInParser) {
             messageUnpacker = MessagePack.newDefaultUnpacker(input);
+            ownsThreadLocalUnpacker = false;
             return;
         }
 
@@ -111,6 +113,7 @@ public class MessagePackParser
             messageUnpacker = messageUnpackerTuple.second();
         }
         messageUnpackerHolder.set(new Tuple<>(src, messageUnpacker));
+        ownsThreadLocalUnpacker = true;
     }
 
     public void setExtensionTypeCustomDeserializers(ExtensionTypeCustomDeserializers extTypeCustomDesers)
@@ -555,9 +558,11 @@ public class MessagePackParser
         }
         finally {
             isClosed = true;
-            Tuple<Object, MessageUnpacker> tuple = messageUnpackerHolder.get();
-            if (tuple != null && tuple.first() instanceof byte[]) {
-                messageUnpackerHolder.set(new Tuple<>(null, tuple.second()));
+            if (ownsThreadLocalUnpacker) {
+                Tuple<Object, MessageUnpacker> tuple = messageUnpackerHolder.get();
+                if (tuple != null && tuple.first() instanceof byte[]) {
+                    messageUnpackerHolder.set(new Tuple<>(null, tuple.second()));
+                }
             }
         }
     }
