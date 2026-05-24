@@ -58,6 +58,7 @@ public class MessagePackGenerator
     private final List<Node> nodes;
     private boolean isElementsClosed = false;
     private MessagePackWriteContext writeContext;
+    private final boolean ownsThreadLocalBuffer;
 
     private static final class MessagePackWriteContext extends TokenStreamContext
     {
@@ -279,6 +280,7 @@ public class MessagePackGenerator
         this.nodes = new ArrayList<>();
         this.supportIntegerKeys = supportIntegerKeys;
         this.writeContext = MessagePackWriteContext.createRootContext();
+        this.ownsThreadLocalBuffer = false;
     }
 
     public MessagePackGenerator(
@@ -298,6 +300,7 @@ public class MessagePackGenerator
         this.nodes = new ArrayList<>();
         this.supportIntegerKeys = supportIntegerKeys;
         this.writeContext = MessagePackWriteContext.createRootContext();
+        this.ownsThreadLocalBuffer = reuseResourceInGenerator;
     }
 
     private MessageBufferOutput getMessageBufferOutputForOutputStream(
@@ -497,12 +500,6 @@ public class MessagePackGenerator
                     objectWriteContext(), _ioContext, _streamWriteFeatures,
                     outputStream, packerConfig, supportIntegerKeys)) {
                 objectWriteContext().writeValue(messagePackGenerator, v);
-            }
-            // Closing the nested generator resets the shared ThreadLocal OutputStreamBufferOutput
-            // to null via _releaseBuffers(). Re-attach it to this generator's output stream.
-            OutputStreamBufferOutput bufferOutput = messageBufferOutputHolder.get();
-            if (bufferOutput != null) {
-                bufferOutput.reset(output);
             }
             output.write(outputStream.toByteArray());
         }
@@ -1050,10 +1047,9 @@ public class MessagePackGenerator
     @Override
     protected void _releaseBuffers()
     {
-        OutputStreamBufferOutput messageBufferOutput = messageBufferOutputHolder.get();
-        if (messageBufferOutput != null) {
+        if (ownsThreadLocalBuffer) {
             try {
-                messageBufferOutput.reset(null);
+                messageBufferOutputHolder.get().reset(null);
             }
             catch (IOException e) {
                 throw _wrapIOFailure(e);
