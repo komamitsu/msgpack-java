@@ -18,7 +18,6 @@ package org.msgpack.jackson.dataformat;
 import tools.jackson.core.Base64Variant;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.util.JacksonFeatureSet;
-import tools.jackson.core.util.SimpleStreamWriteContext;
 import tools.jackson.core.JsonGenerator;
 import tools.jackson.core.ObjectWriteContext;
 import tools.jackson.core.SerializableString;
@@ -58,7 +57,87 @@ public class MessagePackGenerator
     private int currentState = IN_ROOT;
     private final List<Node> nodes;
     private boolean isElementsClosed = false;
-    private SimpleStreamWriteContext writeContext;
+    private MessagePackWriteContext writeContext;
+
+    private static final class MessagePackWriteContext extends TokenStreamContext
+    {
+        private final MessagePackWriteContext parent;
+        private String currentName;
+        private Object currentValue;
+        // For TYPE_OBJECT: true after writeName (expecting value), false after writeValue (expecting name)
+        private boolean gotName;
+
+        private MessagePackWriteContext(int type, MessagePackWriteContext parent)
+        {
+            super(type, -1);
+            this.parent = parent;
+        }
+
+        static MessagePackWriteContext createRootContext()
+        {
+            return new MessagePackWriteContext(TYPE_ROOT, null);
+        }
+
+        MessagePackWriteContext createChildArrayContext(Object value)
+        {
+            MessagePackWriteContext ctx = new MessagePackWriteContext(TYPE_ARRAY, this);
+            ctx.currentValue = value;
+            return ctx;
+        }
+
+        MessagePackWriteContext createChildObjectContext(Object value)
+        {
+            MessagePackWriteContext ctx = new MessagePackWriteContext(TYPE_OBJECT, this);
+            ctx.currentValue = value;
+            return ctx;
+        }
+
+        @Override
+        public MessagePackWriteContext getParent()
+        {
+            return parent;
+        }
+
+        boolean writeValue()
+        {
+            if (_type == TYPE_OBJECT) {
+                if (!gotName) {
+                    return false;
+                }
+                gotName = false;
+            }
+            ++_index;
+            return true;
+        }
+
+        boolean writeName(String name)
+        {
+            if (_type != TYPE_OBJECT || gotName) {
+                return false;
+            }
+            currentName = name;
+            gotName = true;
+            return true;
+        }
+
+        @Override
+        public String currentName()
+        {
+            return currentName;
+        }
+
+        @Override
+        public Object currentValue()
+        {
+            return currentValue;
+        }
+
+        @Override
+        public void assignCurrentValue(Object v)
+        {
+            currentValue = v;
+        }
+    }
 
     private static final class RawUtf8String
     {
@@ -199,7 +278,7 @@ public class MessagePackGenerator
         this.packerConfig = packerConfig;
         this.nodes = new ArrayList<>();
         this.supportIntegerKeys = supportIntegerKeys;
-        this.writeContext = SimpleStreamWriteContext.createRootContext(null);
+        this.writeContext = MessagePackWriteContext.createRootContext();
     }
 
     public MessagePackGenerator(
@@ -218,7 +297,7 @@ public class MessagePackGenerator
         this.packerConfig = packerConfig;
         this.nodes = new ArrayList<>();
         this.supportIntegerKeys = supportIntegerKeys;
-        this.writeContext = SimpleStreamWriteContext.createRootContext(null);
+        this.writeContext = MessagePackWriteContext.createRootContext();
     }
 
     private MessageBufferOutput getMessageBufferOutputForOutputStream(
@@ -339,7 +418,7 @@ public class MessagePackGenerator
 
     private void endCurrentContainer()
     {
-        writeContext = writeContext.clearAndGetParent();
+        writeContext = writeContext.getParent();
         Node parent = nodes.get(currentParentElementIndex);
         if (currentParentElementIndex == 0) {
             isElementsClosed = true;
