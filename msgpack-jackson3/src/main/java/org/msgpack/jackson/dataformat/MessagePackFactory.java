@@ -34,6 +34,7 @@ import org.msgpack.core.MessagePack;
 import org.msgpack.core.annotations.VisibleForTesting;
 
 import org.msgpack.core.buffer.ArrayBufferInput;
+import org.msgpack.core.buffer.InputStreamBufferInput;
 import org.msgpack.core.buffer.MessageBufferInput;
 
 import java.io.DataInput;
@@ -117,7 +118,8 @@ public class MessagePackFactory
     {
         try {
             MessagePackParser parser = new MessagePackParser(readCtxt, ioCtxt,
-                    readCtxt.getStreamReadFeatures(_streamReadFeatures), in, reuseResourceInParser);
+                    readCtxt.getStreamReadFeatures(_streamReadFeatures),
+                    new InputStreamBufferInput(in), in, reuseResourceInParser);
             if (extTypeCustomDesers != null) {
                 parser.setExtensionTypeCustomDeserializers(extTypeCustomDesers);
             }

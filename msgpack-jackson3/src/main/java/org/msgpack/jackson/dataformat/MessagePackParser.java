@@ -31,12 +31,10 @@ import org.msgpack.core.ExtensionTypeHeader;
 import org.msgpack.core.MessageFormat;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessageUnpacker;
-import org.msgpack.core.buffer.InputStreamBufferInput;
 import org.msgpack.core.buffer.MessageBufferInput;
 import org.msgpack.value.ValueType;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
@@ -70,17 +68,6 @@ public class MessagePackParser
     private String stringValue;
     private BigInteger biValue;
     private MessagePackExtensionType extensionTypeValue;
-
-    public MessagePackParser(
-            ObjectReadContext readCtxt,
-            IOContext ioCtxt,
-            int streamReadFeatures,
-            InputStream in,
-            boolean reuseResourceInParser)
-            throws IOException
-    {
-        this(readCtxt, ioCtxt, streamReadFeatures, new InputStreamBufferInput(in), in, reuseResourceInParser);
-    }
 
     MessagePackParser(ObjectReadContext readCtxt,
             IOContext ioCtxt,
