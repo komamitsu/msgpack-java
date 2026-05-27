@@ -411,7 +411,7 @@ public class MessagePackGenerator
         else if (v instanceof ByteBuffer) {
             ByteBuffer bb = (ByteBuffer) v;
             int len = bb.remaining();
-            if (bb.hasArray()) {
+            if (bb.hasArray() && !bb.isReadOnly()) {
                 messagePacker.packBinaryHeader(len);
                 messagePacker.writePayload(bb.array(), bb.arrayOffset() + bb.position(), len);
             }

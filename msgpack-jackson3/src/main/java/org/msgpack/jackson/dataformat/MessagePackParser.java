@@ -238,6 +238,7 @@ public class MessagePackParser
             case BINARY:
                 type = Type.BYTES;
                 int len = messageUnpacker.unpackBinaryHeader();
+                _streamReadConstraints.validateStringLength(len);
                 bytesValue = messageUnpacker.readPayload(len);
                 if (isObjectValueSet) {
                     streamReadContext.setCurrentName(new String(bytesValue, MessagePack.UTF8));
@@ -258,6 +259,7 @@ public class MessagePackParser
             case EXTENSION:
                 type = Type.EXT;
                 ExtensionTypeHeader header = messageUnpacker.unpackExtensionTypeHeader();
+                _streamReadConstraints.validateStringLength(header.getLength());
                 extensionTypeValue = new MessagePackExtensionType(header.getType(), messageUnpacker.readPayload(header.getLength()));
                 if (isObjectValueSet) {
                     streamReadContext.setCurrentName(deserializedExtensionTypeValue().toString());
@@ -268,7 +270,7 @@ public class MessagePackParser
                 }
                 break;
             default:
-                nextToken = _reportError("Unexpected MessagePack format type: " + type);
+                nextToken = _reportError("Unexpected MessagePack format type: " + valueType);
         }
         currentPosition = messageUnpacker.getTotalReadBytes();
 
