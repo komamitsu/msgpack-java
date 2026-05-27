@@ -64,10 +64,14 @@ public class MessagePackGenerator
     private static final class RawUtf8String
     {
         public final byte[] bytes;
+        public final int offset;
+        public final int len;
 
-        public RawUtf8String(byte[] bytes)
+        public RawUtf8String(byte[] bytes, int offset, int len)
         {
             this.bytes = bytes;
+            this.offset = offset;
+            this.len = len;
         }
     }
 
@@ -376,9 +380,9 @@ public class MessagePackGenerator
             messagePacker.packString((String) v);
         }
         else if (v instanceof RawUtf8String) {
-            byte[] bytes = ((RawUtf8String) v).bytes;
-            messagePacker.packRawStringHeader(bytes.length);
-            messagePacker.writePayload(bytes);
+            RawUtf8String raw = (RawUtf8String) v;
+            messagePacker.packRawStringHeader(raw.len);
+            messagePacker.writePayload(raw.bytes, raw.offset, raw.len);
         }
         else if (v instanceof Integer) {
             messagePacker.packInt((Integer) v);
@@ -514,9 +518,7 @@ public class MessagePackGenerator
 
     private void writeByteArrayTextValue(byte[] text, int offset, int len) throws IOException
     {
-        byte[] slice = new byte[len];
-        System.arraycopy(text, offset, slice, 0, len);
-        addValueNode(new RawUtf8String(slice));
+        addValueNode(new RawUtf8String(text, offset, len));
     }
 
     @Override
