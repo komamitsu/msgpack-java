@@ -477,8 +477,7 @@ public class MessagePackGenerator
         if (currentState != IN_OBJECT) {
             throw new IllegalStateException();
         }
-        Node node = new NodeEntryInObject(currentParentElementIndex, key);
-        nodes.add(node);
+        nodes.add(new NodeEntryInObject(currentParentElementIndex, key));
     }
 
     private void addValueNode(Object value) throws IOException
