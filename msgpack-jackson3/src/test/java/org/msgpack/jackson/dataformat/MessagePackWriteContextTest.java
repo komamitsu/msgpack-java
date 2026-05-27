@@ -179,6 +179,35 @@ public class MessagePackWriteContextTest
     }
 
     @Test
+    public void testChildContextIsReused()
+            throws IOException
+    {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try (JsonGenerator gen = factory.createGenerator(ObjectWriteContext.empty(), baos)) {
+            gen.writeStartArray();
+
+            gen.writeStartObject();
+            TokenStreamContext first = gen.streamWriteContext();
+            gen.writeName("k");
+            gen.writeNumber(1);
+            gen.writeEndObject();
+
+            gen.writeStartObject();
+            TokenStreamContext second = gen.streamWriteContext();
+            assertSame(first, second);
+            assertNull(second.currentName());
+            assertEquals(0, second.getCurrentIndex());
+            assertEquals(0, second.getEntryCount());
+
+            gen.writeName("k2");
+            gen.writeNumber(2);
+            gen.writeEndObject();
+
+            gen.writeEndArray();
+        }
+    }
+
+    @Test
     public void testAssignCurrentValue()
             throws IOException
     {

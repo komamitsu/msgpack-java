@@ -20,6 +20,7 @@ import tools.jackson.core.TokenStreamContext;
 class MessagePackWriteContext extends TokenStreamContext
 {
     private final MessagePackWriteContext parent;
+    private MessagePackWriteContext childToRecycle;
     private String currentName;
     private Object currentValue;
     // For TYPE_OBJECT: true after writeName (expecting value), false after writeValue (expecting name)
@@ -31,6 +32,16 @@ class MessagePackWriteContext extends TokenStreamContext
         this.parent = parent;
     }
 
+    private MessagePackWriteContext reset(int type, Object value)
+    {
+        _type = type;
+        _index = -1;
+        gotName = false;
+        currentName = null;
+        currentValue = value;
+        return this;
+    }
+
     static MessagePackWriteContext createRootContext()
     {
         return new MessagePackWriteContext(TYPE_ROOT, null);
@@ -38,16 +49,22 @@ class MessagePackWriteContext extends TokenStreamContext
 
     MessagePackWriteContext createChildArrayContext(Object value)
     {
-        MessagePackWriteContext ctx = new MessagePackWriteContext(TYPE_ARRAY, this);
-        ctx.currentValue = value;
-        return ctx;
+        MessagePackWriteContext ctx = childToRecycle;
+        if (ctx == null) {
+            ctx = new MessagePackWriteContext(TYPE_ARRAY, this);
+            childToRecycle = ctx;
+        }
+        return ctx.reset(TYPE_ARRAY, value);
     }
 
     MessagePackWriteContext createChildObjectContext(Object value)
     {
-        MessagePackWriteContext ctx = new MessagePackWriteContext(TYPE_OBJECT, this);
-        ctx.currentValue = value;
-        return ctx;
+        MessagePackWriteContext ctx = childToRecycle;
+        if (ctx == null) {
+            ctx = new MessagePackWriteContext(TYPE_OBJECT, this);
+            childToRecycle = ctx;
+        }
+        return ctx.reset(TYPE_OBJECT, value);
     }
 
     @Override
