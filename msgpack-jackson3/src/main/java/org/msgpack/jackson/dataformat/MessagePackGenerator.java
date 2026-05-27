@@ -455,7 +455,7 @@ public class MessagePackGenerator
 
         if (failedToPackAsBI) {
             double doubleValue = decimal.doubleValue();
-            if (decimal.compareTo(BigDecimal.valueOf(doubleValue)) != 0) {
+            if (Double.isInfinite(doubleValue) || decimal.compareTo(BigDecimal.valueOf(doubleValue)) != 0) {
                 throw new IllegalArgumentException("MessagePack cannot serialize a BigDecimal that can't be represented as double. " + decimal);
             }
             messagePacker.packDouble(doubleValue);
