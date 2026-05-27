@@ -917,8 +917,7 @@ public class MessagePackGenerator
     private void flushMessagePacker()
             throws IOException
     {
-        MessagePacker messagePacker = getMessagePacker();
-        messagePacker.flush();
+        getMessagePacker().flush();
     }
 
     @Override
