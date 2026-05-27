@@ -595,30 +595,19 @@ public class MessagePackGenerator
     public JsonGenerator writeString(Reader reader, int len) throws JacksonException
     {
         try {
-            if (len < 0) {
-                StringBuilder sb = new StringBuilder();
-                char[] tmpBuf = new char[1024];
-                int read;
-                while ((read = reader.read(tmpBuf)) >= 0) {
-                    sb.append(tmpBuf, 0, read);
+            long remaining = len < 0 ? Long.MAX_VALUE : len;
+            int chunkSize = (int) Math.min(remaining, 8192);
+            StringBuilder sb = new StringBuilder(chunkSize);
+            char[] tmpBuf = new char[chunkSize];
+            while (remaining > 0) {
+                int read = reader.read(tmpBuf, 0, (int) Math.min(remaining, tmpBuf.length));
+                if (read < 0) {
+                    break;
                 }
-                addValueNode(sb.toString());
+                sb.append(tmpBuf, 0, read);
+                remaining -= read;
             }
-            else {
-                int chunkSize = Math.min(len, 8192);
-                StringBuilder sb = new StringBuilder(chunkSize);
-                char[] tmpBuf = new char[chunkSize];
-                int remaining = len;
-                while (remaining > 0) {
-                    int read = reader.read(tmpBuf, 0, Math.min(remaining, tmpBuf.length));
-                    if (read < 0) {
-                        break;
-                    }
-                    sb.append(tmpBuf, 0, read);
-                    remaining -= read;
-                }
-                addValueNode(sb.toString());
-            }
+            addValueNode(sb.toString());
         }
         catch (IOException e) {
             throw _wrapIOFailure(e);
