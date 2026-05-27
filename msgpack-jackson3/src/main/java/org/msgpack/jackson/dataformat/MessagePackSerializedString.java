@@ -67,23 +67,13 @@ public class MessagePackSerializedString
     @Override
     public int appendQuotedUTF8(byte[] bytes, int i)
     {
-        byte[] utf8 = asUnquotedUTF8();
-        if (utf8.length > bytes.length - i) {
-            return -1;
-        }
-        System.arraycopy(utf8, 0, bytes, i, utf8.length);
-        return utf8.length;
+        return appendUnquotedUTF8(bytes, i);
     }
 
     @Override
     public int appendQuoted(char[] chars, int i)
     {
-        char[] q = asQuotedChars();
-        if (q.length > chars.length - i) {
-            return -1;
-        }
-        System.arraycopy(q, 0, chars, i, q.length);
-        return q.length;
+        return appendUnquoted(chars, i);
     }
 
     @Override
@@ -111,9 +101,7 @@ public class MessagePackSerializedString
     @Override
     public int writeQuotedUTF8(OutputStream outputStream) throws IOException
     {
-        byte[] utf8 = asUnquotedUTF8();
-        outputStream.write(utf8);
-        return utf8.length;
+        return writeUnquotedUTF8(outputStream);
     }
 
     @Override
@@ -127,12 +115,7 @@ public class MessagePackSerializedString
     @Override
     public int putQuotedUTF8(ByteBuffer byteBuffer)
     {
-        byte[] utf8 = asUnquotedUTF8();
-        if (utf8.length > byteBuffer.remaining()) {
-            return -1;
-        }
-        byteBuffer.put(utf8);
-        return utf8.length;
+        return putUnquotedUTF8(byteBuffer);
     }
 
     @Override
