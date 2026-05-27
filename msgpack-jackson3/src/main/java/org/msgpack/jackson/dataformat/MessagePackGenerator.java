@@ -479,7 +479,7 @@ public class MessagePackGenerator
     private void addKeyNode(Object key)
     {
         if (currentState != IN_OBJECT) {
-            throw new IllegalStateException();
+            _reportError("Can not write a property name, expecting a value");
         }
         nodes.add(new NodeEntryInObject(currentParentElementIndex, key));
     }

@@ -163,6 +163,7 @@ public class MessagePackParser
             case STRING:
                 type = Type.STRING;
                 stringValue = unpackString(messageUnpacker);
+                _streamReadConstraints.validateStringLength(stringValue.length());
                 if (isObjectValueSet) {
                     streamReadContext.setCurrentName(stringValue);
                     nextToken = JsonToken.PROPERTY_NAME;
@@ -251,10 +252,12 @@ public class MessagePackParser
             case ARRAY:
                 nextToken = JsonToken.START_ARRAY;
                 streamReadContext = streamReadContext.createChildArrayContext(messageUnpacker.unpackArrayHeader());
+                _streamReadConstraints.validateNestingDepth(streamReadContext.getNestingDepth());
                 break;
             case MAP:
                 nextToken = JsonToken.START_OBJECT;
                 streamReadContext = streamReadContext.createChildObjectContext(messageUnpacker.unpackMapHeader());
+                _streamReadConstraints.validateNestingDepth(streamReadContext.getNestingDepth());
                 break;
             case EXTENSION:
                 type = Type.EXT;
