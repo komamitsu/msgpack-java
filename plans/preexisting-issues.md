@@ -316,3 +316,47 @@ to serialize the nested object but never closed. Any resource cleanup in the gen
 `close()` (e.g. flushing pending nodes, releasing the `MessagePacker`) is skipped.
 Fixed in msgpack-jackson3 using try-with-resources; needs the same fix in msgpack-jackson.
 
+## 14. `MessagePackGenerator`: `writeByteArrayTextValue` uses `AsciiCharString` instead of raw bytes
+
+**Files:**
+- `msgpack-jackson/src/main/java/org/msgpack/jackson/dataformat/MessagePackGenerator.java` (writeByteArrayTextValue)
+- `msgpack-jackson3/src/main/java/org/msgpack/jackson/dataformat/MessagePackGenerator.java` — uses `RawUtf8String`
+
+The v2 generator's `writeByteArrayTextValue` (called from `writeUTF8String` and
+`writeRawUTF8String`) stores the pre-encoded UTF-8 bytes as an `AsciiCharString` (or similar
+wrapper that ultimately calls `packString(String)`). This forces a String decode + re-encode
+roundtrip at flush time:
+
+1. `new String(bytes, offset, len, UTF_8)` — decode UTF-8 bytes to Java String
+2. `s.getBytes(UTF_8)` inside `packString` — re-encode back to UTF-8 bytes
+3. Copy into packer buffer
+
+The jackson3 version avoids this by using a `RawUtf8String` wrapper that writes the bytes
+directly via `packRawStringHeader + writePayload`, skipping both decode and re-encode.
+
+**Benchmark impact (measured on jackson3):**
+- ASCII strings:    ~82K ops/s (RawUtf8String) vs ~57K ops/s (new String) → **-30%**
+- Non-ASCII strings: ~81K ops/s (RawUtf8String) vs ~16K ops/s (new String) → **-80%**
+
+Port `RawUtf8String` and the corresponding `packNonContainer` branch to msgpack-jackson.
+
+## 15. `MessagePackGenerator`: `writeStartArray/Object(Object, int)` size hint unused — potential optimization
+
+**Files:**
+- `msgpack-jackson/src/main/java/org/msgpack/jackson/dataformat/MessagePackGenerator.java`
+- `msgpack-jackson3/src/main/java/org/msgpack/jackson/dataformat/MessagePackGenerator.java`
+
+Both generators currently ignore the `size` parameter. When `size >= 0`, it could in principle
+allow writing the array/map header immediately (skipping the node-buffering phase for that
+container), reducing allocations.
+
+**Caveat (Jackson author confirmed, msgpack-java#841):** Jackson does not guarantee `size >= 0`.
+Dynamic filters (`Views`, `@JsonFilter`) evaluate entries incrementally and will pass `-1` even
+for collections whose size is statically known. Any implementation must fall back to the
+buffered approach when `size == -1`, so the optimization only applies to a subset of
+serialization paths and adds significant complexity.
+
+**Conclusion:** Not worth pursuing unless profiling shows the node-buffering overhead dominates.
+Document the caveat and leave `size` ignored for now. If implemented in the future, both modules
+should be updated together.
+

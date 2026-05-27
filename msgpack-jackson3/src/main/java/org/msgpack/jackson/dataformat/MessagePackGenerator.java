@@ -274,6 +274,11 @@ public class MessagePackGenerator
         return writeStartArray(currentValue, -1);
     }
 
+    // size is ignored: element count is determined at flush time from the actual child nodes.
+    // When size >= 0, it could in principle be used to skip buffering and write the array
+    // header immediately, but Jackson does not guarantee it — dynamic filters (Views,
+    // @JsonFilter) evaluate entries incrementally and will pass -1 even for known-size
+    // collections. Backends must handle both cases (Jackson author confirmed, see #841).
     @Override
     public JsonGenerator writeStartArray(Object currentValue, int size) throws JacksonException
     {
@@ -315,6 +320,7 @@ public class MessagePackGenerator
         return writeStartObject(currentValue, -1);
     }
 
+    // size is ignored: same reasoning as writeStartArray(Object, int) above.
     @Override
     public JsonGenerator writeStartObject(Object forValue, int size) throws JacksonException
     {
