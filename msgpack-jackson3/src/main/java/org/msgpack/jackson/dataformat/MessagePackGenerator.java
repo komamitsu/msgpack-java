@@ -526,7 +526,7 @@ public class MessagePackGenerator
     {
         if (this.supportIntegerKeys) {
             if (!writeContext.writeName(String.valueOf(id))) {
-                _reportError("Cannot write property name, not in Object context");
+                _reportError("Can not write a property id, expecting a value");
             }
             addKeyNode(id);
         }
@@ -546,7 +546,7 @@ public class MessagePackGenerator
     public JsonGenerator writeName(String name) throws JacksonException
     {
         if (!writeContext.writeName(name)) {
-            _reportError("Cannot write property name, not in Object context");
+            _reportError("Can not write a property name, expecting a value");
         }
         addKeyNode(name);
         return this;
@@ -557,7 +557,7 @@ public class MessagePackGenerator
     {
         if (name instanceof MessagePackSerializedString) {
             if (!writeContext.writeName(name.getValue())) {
-                _reportError("Cannot write property name, not in Object context");
+                _reportError("Can not write a property name, expecting a value");
             }
             addKeyNode(((MessagePackSerializedString) name).getRawValue());
         }

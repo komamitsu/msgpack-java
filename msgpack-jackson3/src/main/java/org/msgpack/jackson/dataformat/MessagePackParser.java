@@ -268,7 +268,7 @@ public class MessagePackParser
                 }
                 break;
             default:
-                throw new IllegalStateException("Shouldn't reach here");
+                nextToken = _reportError("Unexpected MessagePack format type: " + type);
         }
         currentPosition = messageUnpacker.getTotalReadBytes();
 
@@ -306,7 +306,7 @@ public class MessagePackParser
                     throw _wrapIOFailure(e);
                 }
             default:
-                throw new IllegalStateException("Invalid type=" + type);
+                return _reportError("Unexpected MessagePack value type: " + type);
         }
     }
 
@@ -345,7 +345,7 @@ public class MessagePackParser
             case EXT:
                 return extensionTypeValue.getData();
             default:
-                throw new IllegalStateException("Invalid type=" + type);
+                return _reportError("Unexpected MessagePack value type: " + type);
         }
     }
 
@@ -362,7 +362,7 @@ public class MessagePackParser
             case BIG_INT:
                 return biValue;
             default:
-                throw new IllegalStateException("Invalid type=" + type);
+                return _reportError("Unexpected MessagePack value type: " + type);
         }
     }
 
@@ -379,7 +379,7 @@ public class MessagePackParser
             case BIG_INT:
                 return biValue.intValue();
             default:
-                throw new IllegalStateException("Invalid type=" + type);
+                return _reportError("Unexpected MessagePack value type: " + type);
         }
     }
 
@@ -396,7 +396,7 @@ public class MessagePackParser
             case BIG_INT:
                 return biValue.longValue();
             default:
-                throw new IllegalStateException("Invalid type=" + type);
+                return _reportError("Unexpected MessagePack value type: " + type);
         }
     }
 
@@ -413,7 +413,7 @@ public class MessagePackParser
             case BIG_INT:
                 return biValue;
             default:
-                throw new IllegalStateException("Invalid type=" + type);
+                return _reportError("Unexpected MessagePack value type: " + type);
         }
     }
 
@@ -430,7 +430,7 @@ public class MessagePackParser
             case BIG_INT:
                 return biValue.floatValue();
             default:
-                throw new IllegalStateException("Invalid type=" + type);
+                return _reportError("Unexpected MessagePack value type: " + type);
         }
     }
 
@@ -447,7 +447,7 @@ public class MessagePackParser
             case BIG_INT:
                 return biValue.doubleValue();
             default:
-                throw new IllegalStateException("Invalid type=" + type);
+                return _reportError("Unexpected MessagePack value type: " + type);
         }
     }
 
@@ -464,7 +464,7 @@ public class MessagePackParser
             case BIG_INT:
                 return new BigDecimal(biValue);
             default:
-                throw new IllegalStateException("Invalid type=" + type);
+                return _reportError("Unexpected MessagePack value type: " + type);
         }
     }
 
@@ -494,7 +494,7 @@ public class MessagePackParser
                     throw _wrapIOFailure(e);
                 }
             default:
-                throw new IllegalStateException("Invalid type=" + type);
+                return _reportError("Unexpected MessagePack value type: " + type);
         }
     }
 
@@ -511,7 +511,7 @@ public class MessagePackParser
             case BIG_INT:
                 return NumberType.BIG_INTEGER;
             default:
-                throw new IllegalStateException("Invalid type=" + type);
+                return _reportError("Unexpected MessagePack value type: " + type);
         }
     }
 
