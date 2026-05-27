@@ -16,20 +16,24 @@
 package org.msgpack.jackson.dataformat;
 
 import tools.jackson.core.TokenStreamContext;
+import tools.jackson.core.exc.StreamWriteException;
+import tools.jackson.core.json.DupDetector;
 
 class MessagePackWriteContext extends TokenStreamContext
 {
     private final MessagePackWriteContext parent;
     private MessagePackWriteContext childToRecycle;
+    private DupDetector dups;
     private String currentName;
     private Object currentValue;
     // For TYPE_OBJECT: true after writeName (expecting value), false after writeValue (expecting name)
     private boolean gotName;
 
-    private MessagePackWriteContext(int type, MessagePackWriteContext parent)
+    private MessagePackWriteContext(int type, MessagePackWriteContext parent, DupDetector dups)
     {
         super(type, -1);
         this.parent = parent;
+        this.dups = dups;
     }
 
     private MessagePackWriteContext reset(int type, Object value)
@@ -39,19 +43,22 @@ class MessagePackWriteContext extends TokenStreamContext
         gotName = false;
         currentName = null;
         currentValue = value;
+        if (dups != null) {
+            dups.reset();
+        }
         return this;
     }
 
-    static MessagePackWriteContext createRootContext()
+    static MessagePackWriteContext createRootContext(DupDetector dups)
     {
-        return new MessagePackWriteContext(TYPE_ROOT, null);
+        return new MessagePackWriteContext(TYPE_ROOT, null, dups);
     }
 
     MessagePackWriteContext createChildArrayContext(Object value)
     {
         MessagePackWriteContext ctx = childToRecycle;
         if (ctx == null) {
-            ctx = new MessagePackWriteContext(TYPE_ARRAY, this);
+            ctx = new MessagePackWriteContext(TYPE_ARRAY, this, dups == null ? null : dups.child());
             childToRecycle = ctx;
         }
         return ctx.reset(TYPE_ARRAY, value);
@@ -61,7 +68,7 @@ class MessagePackWriteContext extends TokenStreamContext
     {
         MessagePackWriteContext ctx = childToRecycle;
         if (ctx == null) {
-            ctx = new MessagePackWriteContext(TYPE_OBJECT, this);
+            ctx = new MessagePackWriteContext(TYPE_OBJECT, this, dups == null ? null : dups.child());
             childToRecycle = ctx;
         }
         return ctx.reset(TYPE_OBJECT, value);
@@ -85,14 +92,24 @@ class MessagePackWriteContext extends TokenStreamContext
         return true;
     }
 
-    boolean writeName(String name)
+    boolean writeName(String name) throws StreamWriteException
     {
         if (_type != TYPE_OBJECT || gotName) {
             return false;
         }
         currentName = name;
         gotName = true;
+        if (dups != null) {
+            _checkDup(name);
+        }
         return true;
+    }
+
+    private void _checkDup(String name) throws StreamWriteException
+    {
+        if (dups.isDup(name)) {
+            throw new StreamWriteException(null, "Duplicate Object property \"" + name + "\"");
+        }
     }
 
     @Override

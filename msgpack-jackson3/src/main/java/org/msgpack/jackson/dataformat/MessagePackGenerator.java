@@ -23,6 +23,7 @@ import tools.jackson.core.ObjectWriteContext;
 import tools.jackson.core.SerializableString;
 import tools.jackson.core.StreamWriteCapability;
 import tools.jackson.core.StreamWriteFeature;
+import tools.jackson.core.json.DupDetector;
 import tools.jackson.core.TokenStreamContext;
 import tools.jackson.core.base.GeneratorBase;
 import tools.jackson.core.io.IOContext;
@@ -199,7 +200,9 @@ public class MessagePackGenerator
         this.packerConfig = packerConfig;
         this.nodes = new ArrayList<>();
         this.supportIntegerKeys = supportIntegerKeys;
-        this.writeContext = MessagePackWriteContext.createRootContext();
+        this.writeContext = MessagePackWriteContext.createRootContext(
+                StreamWriteFeature.STRICT_DUPLICATE_DETECTION.enabledIn(streamWriteFeatures)
+                        ? DupDetector.rootDetector(this) : null);
         this.ownsThreadLocalBuffer = false;
     }
 
@@ -219,7 +222,9 @@ public class MessagePackGenerator
         this.packerConfig = packerConfig;
         this.nodes = new ArrayList<>();
         this.supportIntegerKeys = supportIntegerKeys;
-        this.writeContext = MessagePackWriteContext.createRootContext();
+        this.writeContext = MessagePackWriteContext.createRootContext(
+                StreamWriteFeature.STRICT_DUPLICATE_DETECTION.enabledIn(streamWriteFeatures)
+                        ? DupDetector.rootDetector(this) : null);
         this.ownsThreadLocalBuffer = reuseResourceInGenerator;
     }
 
