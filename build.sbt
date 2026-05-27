@@ -184,7 +184,7 @@ lazy val msgpackJackson3 = Project(id = "msgpack-jackson3", base = file("msgpack
   .enablePlugins(SbtOsgi, JmhPlugin)
   .settings(
     buildSettings,
-    name                        := "jackson-dataformat-msgpack3",
+    name                        := "jackson-dataformat-msgpack-jackson3",
     description                 := "Jackson 3.x extension that adds support for MessagePack",
     OsgiKeys.bundleSymbolicName := "org.msgpack.msgpack-jackson3",
     OsgiKeys.exportPackage      := Seq("org.msgpack.jackson", "org.msgpack.jackson.dataformat"),
