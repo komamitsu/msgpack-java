@@ -186,9 +186,10 @@ they are needed to detect same-stream reuse. Needs the same fix in msgpack-jacks
 - `msgpack-jackson3/src/main/java/org/msgpack/jackson/dataformat/MessagePackGenerator.java` — FIXED
 
 The `close()` override never sets the closed flag, so `isClosed()` remains false.
-Fixed in msgpack-jackson3 by setting `_closed = true` directly (calling `super.close()`
-is not viable since it unconditionally closes the underlying stream, ignoring
-`AUTO_CLOSE_TARGET`). Needs the same fix in msgpack-jackson.
+Fixed in msgpack-jackson3 by delegating to `super.close()`, which sets `_closed` and
+handles `AUTO_CLOSE_TARGET` correctly. Our override calls `flush()` first to drain
+pending nodes, then delegates the rest to `super.close()`. Needs the same fix in
+msgpack-jackson.
 
 ## 4. `MessagePackGenerator`: `writeString(Reader, int)` crashes on length -1
 
