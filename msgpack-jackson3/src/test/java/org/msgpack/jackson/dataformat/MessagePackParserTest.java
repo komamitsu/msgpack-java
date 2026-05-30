@@ -53,8 +53,10 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.Is.is;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.fail;
 
 public class MessagePackParserTest
         extends MessagePackDataformatTestBase
@@ -1128,5 +1130,210 @@ public class MessagePackParserTest
         // so the second parse succeeds and returns the correct result.
         List<Integer> second = objectMapper.readValue(bytes, new TypeReference<List<Integer>>() {});
         assertEquals(Arrays.asList(1, 2, 3), second);
+    }
+
+    @Test
+    public void testGetStringOnNullToken() throws IOException
+    {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (MessagePacker packer = MessagePack.newDefaultPacker(out)) {
+            packer.packNil();
+        }
+        MessagePackFactory factory = new MessagePackFactory();
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), out.toByteArray())) {
+            assertEquals(JsonToken.VALUE_NULL, p.nextToken());
+            assertEquals("null", p.getString());
+        }
+    }
+
+    @Test
+    public void testGetStringOnBoolToken() throws IOException
+    {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (MessagePacker packer = MessagePack.newDefaultPacker(out)) {
+            packer.packBoolean(true);
+            packer.packBoolean(false);
+        }
+        MessagePackFactory factory = new MessagePackFactory();
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), out.toByteArray())) {
+            assertEquals(JsonToken.VALUE_TRUE, p.nextToken());
+            assertEquals("true", p.getString());
+            assertEquals(JsonToken.VALUE_FALSE, p.nextToken());
+            assertEquals("false", p.getString());
+        }
+    }
+
+    @Test
+    public void testNumericAccessorsOnNullTokenThrow() throws IOException
+    {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (MessagePacker packer = MessagePack.newDefaultPacker(out)) {
+            packer.packNil();
+        }
+        byte[] bytes = out.toByteArray();
+        MessagePackFactory factory = new MessagePackFactory();
+
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+            p.nextToken();
+            try {
+                p.getIntValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+        }
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+            p.nextToken();
+            try {
+                p.getLongValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+        }
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+            p.nextToken();
+            try {
+                p.getDoubleValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+        }
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+            p.nextToken();
+            try {
+                p.getFloatValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+        }
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+            p.nextToken();
+            try {
+                p.getBigIntegerValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+        }
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+            p.nextToken();
+            try {
+                p.getDecimalValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+        }
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+            p.nextToken();
+            try {
+                p.getNumberValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+        }
+    }
+
+    @Test
+    public void testNumericAccessorsOnBoolTokenThrow() throws IOException
+    {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (MessagePacker packer = MessagePack.newDefaultPacker(out)) {
+            packer.packBoolean(true);
+        }
+        byte[] bytes = out.toByteArray();
+        MessagePackFactory factory = new MessagePackFactory();
+
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+            p.nextToken();
+            try {
+                p.getIntValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+        }
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+            p.nextToken();
+            try {
+                p.getLongValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+        }
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+            p.nextToken();
+            try {
+                p.getDoubleValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+        }
+    }
+
+    @Test
+    public void testGetNumberTypeOnNonNumericTokens() throws IOException
+    {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (MessagePacker packer = MessagePack.newDefaultPacker(out)) {
+            packer.packNil();
+            packer.packBoolean(true);
+            packer.packString("hello");
+        }
+        MessagePackFactory factory = new MessagePackFactory();
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), out.toByteArray())) {
+            assertEquals(JsonToken.VALUE_NULL, p.nextToken());
+            assertNull(p.getNumberType());
+            assertEquals(JsonToken.VALUE_TRUE, p.nextToken());
+            assertNull(p.getNumberType());
+            assertEquals(JsonToken.VALUE_STRING, p.nextToken());
+            assertNull(p.getNumberType());
+        }
+    }
+
+    @Test
+    public void testGetIntValueFromOutOfRangeDoubleThrows() throws IOException
+    {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (MessagePacker packer = MessagePack.newDefaultPacker(out)) {
+            packer.packDouble(1e30);
+        }
+        MessagePackFactory factory = new MessagePackFactory();
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), out.toByteArray())) {
+            assertEquals(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
+            try {
+                p.getIntValue();
+                fail("expected exception for out-of-range double");
+            }
+            catch (JacksonException ignored) { }
+        }
+    }
+
+    @Test
+    public void testGetLongValueFromOutOfRangeDoubleThrows() throws IOException
+    {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (MessagePacker packer = MessagePack.newDefaultPacker(out)) {
+            packer.packDouble(1e30);
+        }
+        MessagePackFactory factory = new MessagePackFactory();
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), out.toByteArray())) {
+            assertEquals(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
+            try {
+                p.getLongValue();
+                fail("expected exception for out-of-range double");
+            }
+            catch (JacksonException ignored) { }
+        }
+    }
+
+    @Test
+    public void testGetIntValueFromFractionalDoubleTruncates() throws IOException
+    {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (MessagePacker packer = MessagePack.newDefaultPacker(out)) {
+            packer.packDouble(3.7);
+        }
+        MessagePackFactory factory = new MessagePackFactory();
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), out.toByteArray())) {
+            assertEquals(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
+            assertEquals(3, p.getIntValue());
+        }
     }
 }

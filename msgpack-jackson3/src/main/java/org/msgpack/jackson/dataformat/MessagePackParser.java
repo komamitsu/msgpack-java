@@ -58,12 +58,13 @@ public class MessagePackParser
 
     private enum Type
     {
-        INT, LONG, DOUBLE, STRING, BYTES, BIG_INT, EXT
+        INT, LONG, DOUBLE, STRING, BYTES, BOOL, BIG_INT, EXT, NULL
     }
     private Type type;
     private int intValue;
     private long longValue;
     private double doubleValue;
+    private boolean booleanValue;
     private byte[] bytesValue;
     private String stringValue;
     private BigInteger biValue;
@@ -216,13 +217,14 @@ public class MessagePackParser
                 }
                 break;
             case NIL:
-                type = null;
+                type = Type.NULL;
                 messageUnpacker.unpackNil();
                 nextToken = JsonToken.VALUE_NULL;
                 break;
             case BOOLEAN:
-                type = null;
                 boolean b = messageUnpacker.unpackBoolean();
+                type = Type.BOOL;
+                booleanValue = b;
                 if (isObjectValueSet) {
                     streamReadContext.setCurrentName(Boolean.toString(b));
                     nextToken = JsonToken.PROPERTY_NAME;
@@ -296,15 +298,6 @@ public class MessagePackParser
     @Override
     public String getString()
     {
-        if (_currToken == JsonToken.VALUE_NULL) {
-            return null;
-        }
-        if (_currToken == JsonToken.VALUE_TRUE) {
-            return Boolean.TRUE.toString();
-        }
-        if (_currToken == JsonToken.VALUE_FALSE) {
-            return Boolean.FALSE.toString();
-        }
         switch (type) {
             case STRING:
                 return stringValue;
@@ -316,6 +309,8 @@ public class MessagePackParser
                 return String.valueOf(longValue);
             case DOUBLE:
                 return String.valueOf(doubleValue);
+            case BOOL:
+                return Boolean.toString(booleanValue);
             case BIG_INT:
                 return String.valueOf(biValue);
             case EXT:
@@ -325,6 +320,8 @@ public class MessagePackParser
                 catch (IOException e) {
                     throw _wrapIOFailure(e);
                 }
+            case NULL:
+                return "null";
             default:
                 return _reportError("Unexpected MessagePack value type: " + type);
         }
@@ -364,6 +361,13 @@ public class MessagePackParser
                 return stringValue.getBytes(MessagePack.UTF8);
             case EXT:
                 return extensionTypeValue.getData();
+            case INT:
+            case LONG:
+            case DOUBLE:
+            case BOOL:
+            case BIG_INT:
+            case NULL:
+                return _reportError("Current token (" + _currToken + ") not of binary type");
             default:
                 return _reportError("Unexpected MessagePack value type: " + type);
         }
@@ -381,6 +385,12 @@ public class MessagePackParser
                 return doubleValue;
             case BIG_INT:
                 return biValue;
+            case NULL:
+            case BOOL:
+            case STRING:
+            case BYTES:
+            case EXT:
+                return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
             default:
                 return _reportError("Unexpected MessagePack value type: " + type);
         }
@@ -393,11 +403,31 @@ public class MessagePackParser
             case INT:
                 return intValue;
             case LONG:
+                if (longValue < Integer.MIN_VALUE || longValue > Integer.MAX_VALUE) {
+                    return _reportError("Numeric value (" + longValue + ") out of range for `int`");
+                }
                 return (int) longValue;
             case DOUBLE:
+                if (!Double.isFinite(doubleValue)) {
+                    return _reportError("Cannot convert non-finite double (" + doubleValue + ") to `int`");
+                }
+                if (doubleValue < Integer.MIN_VALUE || doubleValue > Integer.MAX_VALUE) {
+                    return _reportError("Numeric value (" + doubleValue + ") out of range for `int`");
+                }
                 return (int) doubleValue;
             case BIG_INT:
-                return biValue.intValue();
+                try {
+                    return biValue.intValueExact();
+                }
+                catch (ArithmeticException e) {
+                    return _reportError("Numeric value (" + biValue + ") out of range for `int`");
+                }
+            case NULL:
+            case BOOL:
+            case STRING:
+            case BYTES:
+            case EXT:
+                return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
             default:
                 return _reportError("Unexpected MessagePack value type: " + type);
         }
@@ -412,9 +442,26 @@ public class MessagePackParser
             case LONG:
                 return longValue;
             case DOUBLE:
+                if (!Double.isFinite(doubleValue)) {
+                    return _reportError("Cannot convert non-finite double (" + doubleValue + ") to `long`");
+                }
+                if (doubleValue < Long.MIN_VALUE || doubleValue > Long.MAX_VALUE) {
+                    return _reportError("Numeric value (" + doubleValue + ") out of range for `long`");
+                }
                 return (long) doubleValue;
             case BIG_INT:
-                return biValue.longValue();
+                try {
+                    return biValue.longValueExact();
+                }
+                catch (ArithmeticException e) {
+                    return _reportError("Numeric value (" + biValue + ") out of range for `long`");
+                }
+            case NULL:
+            case BOOL:
+            case STRING:
+            case BYTES:
+            case EXT:
+                return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
             default:
                 return _reportError("Unexpected MessagePack value type: " + type);
         }
@@ -429,9 +476,18 @@ public class MessagePackParser
             case LONG:
                 return BigInteger.valueOf(longValue);
             case DOUBLE:
-                return BigInteger.valueOf((long) doubleValue);
+                if (!Double.isFinite(doubleValue)) {
+                    return _reportError("Cannot convert non-finite double (" + doubleValue + ") to BigInteger");
+                }
+                return BigDecimal.valueOf(doubleValue).toBigInteger(); // truncates fractional part
             case BIG_INT:
                 return biValue;
+            case NULL:
+            case BOOL:
+            case STRING:
+            case BYTES:
+            case EXT:
+                return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
             default:
                 return _reportError("Unexpected MessagePack value type: " + type);
         }
@@ -440,6 +496,8 @@ public class MessagePackParser
     @Override
     public float getFloatValue()
     {
+        // No bounds/range check: a finite double or large BigInteger may overflow to
+        // Float.POSITIVE_INFINITY. This is intentional — same as ParserBase and CBORParser.
         switch (type) {
             case INT:
                 return (float) intValue;
@@ -449,6 +507,12 @@ public class MessagePackParser
                 return (float) doubleValue;
             case BIG_INT:
                 return biValue.floatValue();
+            case NULL:
+            case BOOL:
+            case STRING:
+            case BYTES:
+            case EXT:
+                return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
             default:
                 return _reportError("Unexpected MessagePack value type: " + type);
         }
@@ -457,15 +521,23 @@ public class MessagePackParser
     @Override
     public double getDoubleValue()
     {
-         switch (type) {
-             case INT:
-                 return intValue;
+        // No bounds/range check: large BigInteger may overflow to Double.POSITIVE_INFINITY,
+        // and large long values may lose precision. Intentional — same as ParserBase.
+        switch (type) {
+            case INT:
+                return intValue;
             case LONG:
                 return (double) longValue;
             case DOUBLE:
                 return doubleValue;
             case BIG_INT:
                 return biValue.doubleValue();
+            case NULL:
+            case BOOL:
+            case STRING:
+            case BYTES:
+            case EXT:
+                return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
             default:
                 return _reportError("Unexpected MessagePack value type: " + type);
         }
@@ -474,15 +546,24 @@ public class MessagePackParser
     @Override
     public BigDecimal getDecimalValue()
     {
-         switch (type) {
-             case INT:
-                 return BigDecimal.valueOf(intValue);
+        switch (type) {
+            case INT:
+                return BigDecimal.valueOf(intValue);
             case LONG:
                 return BigDecimal.valueOf(longValue);
             case DOUBLE:
-                 return BigDecimal.valueOf(doubleValue);
+                if (!Double.isFinite(doubleValue)) {
+                    return _reportError("Cannot convert non-finite double (" + doubleValue + ") to BigDecimal");
+                }
+                return BigDecimal.valueOf(doubleValue);
             case BIG_INT:
                 return new BigDecimal(biValue);
+            case NULL:
+            case BOOL:
+            case STRING:
+            case BYTES:
+            case EXT:
+                return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
             default:
                 return _reportError("Unexpected MessagePack value type: " + type);
         }
@@ -513,6 +594,14 @@ public class MessagePackParser
                 catch (IOException e) {
                     throw _wrapIOFailure(e);
                 }
+            case INT:
+            case LONG:
+            case DOUBLE:
+            case BOOL:
+            case BIG_INT:
+            case STRING:
+            case NULL:
+                return _reportError("Current token (" + _currToken + ") not of embeddable type");
             default:
                 return _reportError("Unexpected MessagePack value type: " + type);
         }
@@ -530,6 +619,12 @@ public class MessagePackParser
                 return NumberType.DOUBLE;
             case BIG_INT:
                 return NumberType.BIG_INTEGER;
+            case NULL:
+            case BOOL:
+            case STRING:
+            case BYTES:
+            case EXT:
+                return null;
             default:
                 return _reportError("Unexpected MessagePack value type: " + type);
         }
