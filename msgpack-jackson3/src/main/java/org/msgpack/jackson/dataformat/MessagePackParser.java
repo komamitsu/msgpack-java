@@ -702,21 +702,22 @@ public class MessagePackParser
         }
         finally {
             isClosed = true;
-            if (ownsThreadLocalUnpacker) {
-                WeakReference<Tuple<Object, MessageUnpacker>> ref = messageUnpackerHolder.get();
-                Tuple<Object, MessageUnpacker> tuple = ref != null ? ref.get() : null;
-                if (tuple != null && tuple.first() instanceof byte[]) {
-                    try {
-                        // close() calls ArrayBufferInput.close() which sets buffer = null,
-                        // releasing the byte[] payload reference held by the unpacker's input.
-                        // The unpacker itself is kept alive for reuse on the next parse.
-                        tuple.second().close();
-                    }
-                    catch (IOException e) {
-                        throw _wrapIOFailure(e);
-                    }
-                    messageUnpackerHolder.set(new WeakReference<>(new Tuple<>(null, tuple.second())));
+        }
+
+        if (ownsThreadLocalUnpacker) {
+            WeakReference<Tuple<Object, MessageUnpacker>> ref = messageUnpackerHolder.get();
+            Tuple<Object, MessageUnpacker> tuple = ref != null ? ref.get() : null;
+            if (tuple != null && tuple.first() instanceof byte[]) {
+                try {
+                    // close() calls ArrayBufferInput.close() which sets buffer = null,
+                    // releasing the byte[] payload reference held by the unpacker's input.
+                    // The unpacker itself is kept alive for reuse on the next parse.
+                    tuple.second().close();
                 }
+                catch (IOException e) {
+                    throw _wrapIOFailure(e);
+                }
+                messageUnpackerHolder.set(new WeakReference<>(new Tuple<>(null, tuple.second())));
             }
         }
     }
