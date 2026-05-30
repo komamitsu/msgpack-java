@@ -34,9 +34,11 @@ public class MessagePackSerializerFactory
         super(config);
     }
 
+    private static final MessagePackKeySerializer KEY_SERIALIZER = new MessagePackKeySerializer();
+
     @Override
     public ValueSerializer<Object> createKeySerializer(SerializationContext ctxt, JavaType keyType)
     {
-        return new MessagePackKeySerializer();
+        return KEY_SERIALIZER;
     }
 }

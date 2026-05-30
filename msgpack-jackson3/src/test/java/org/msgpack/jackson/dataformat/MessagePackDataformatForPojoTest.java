@@ -45,7 +45,7 @@ public class MessagePackDataformatForPojoTest
         assertEquals(normalPojo.d, value.d, 0.000001f);
         assertArrayEquals(normalPojo.b, value.b);
         assertEquals(normalPojo.bi, value.bi);
-        assertEquals(normalPojo.suit, Suit.HEART);
+        assertEquals(normalPojo.suit, value.suit);
         assertEquals(normalPojo.sMultibyte, value.sMultibyte);
     }
 
