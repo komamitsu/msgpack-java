@@ -36,6 +36,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.Reader;
+import java.lang.ref.WeakReference;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -49,7 +50,7 @@ public class MessagePackGenerator
     private static final int IN_OBJECT = 1;
     private static final int IN_ARRAY = 2;
     private final MessagePacker messagePacker;
-    private static final ThreadLocal<OutputStreamBufferOutput> messageBufferOutputHolder = new ThreadLocal<>();
+    private static final ThreadLocal<WeakReference<OutputStreamBufferOutput>> messageBufferOutputHolder = new ThreadLocal<>();
     private final OutputStream output;
     private final MessagePack.PackerConfig packerConfig;
     private final boolean supportIntegerKeys;
@@ -242,10 +243,11 @@ public class MessagePackGenerator
     {
         OutputStreamBufferOutput messageBufferOutput;
         if (reuseResourceInGenerator) {
-            messageBufferOutput = messageBufferOutputHolder.get();
+            WeakReference<OutputStreamBufferOutput> ref = messageBufferOutputHolder.get();
+            messageBufferOutput = ref != null ? ref.get() : null;
             if (messageBufferOutput == null) {
                 messageBufferOutput = new OutputStreamBufferOutput(out);
-                messageBufferOutputHolder.set(messageBufferOutput);
+                messageBufferOutputHolder.set(new WeakReference<>(messageBufferOutput));
             }
             else {
                 messageBufferOutput.reset(out);
@@ -999,11 +1001,15 @@ public class MessagePackGenerator
         // ThreadLocal is always set on the calling thread. A null here would indicate
         // cross-thread misuse; letting it NPE surfaces that bug immediately.
         if (ownsThreadLocalBuffer) {
-            try {
-                messageBufferOutputHolder.get().reset(null);
-            }
-            catch (IOException e) {
-                throw _wrapIOFailure(e);
+            WeakReference<OutputStreamBufferOutput> ref = messageBufferOutputHolder.get();
+            OutputStreamBufferOutput buf = ref != null ? ref.get() : null;
+            if (buf != null) {
+                try {
+                    buf.reset(null);
+                }
+                catch (IOException e) {
+                    throw _wrapIOFailure(e);
+                }
             }
         }
     }

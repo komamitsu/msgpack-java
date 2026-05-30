@@ -35,13 +35,14 @@ import org.msgpack.core.buffer.MessageBufferInput;
 import org.msgpack.value.ValueType;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
 public class MessagePackParser
         extends ParserMinimalBase
 {
-    private static final ThreadLocal<Tuple<Object, MessageUnpacker>> messageUnpackerHolder = new ThreadLocal<>();
+    private static final ThreadLocal<Tuple<WeakReference<Object>, MessageUnpacker>> messageUnpackerHolder = new ThreadLocal<>();
     private final MessageUnpacker messageUnpacker;
 
     private static final BigInteger LONG_MIN = BigInteger.valueOf(Long.MIN_VALUE);
@@ -90,7 +91,7 @@ public class MessagePackParser
             return;
         }
 
-        Tuple<Object, MessageUnpacker> messageUnpackerTuple = messageUnpackerHolder.get();
+        Tuple<WeakReference<Object>, MessageUnpacker> messageUnpackerTuple = messageUnpackerHolder.get();
         if (messageUnpackerTuple == null) {
             messageUnpacker = MessagePack.newDefaultUnpacker(input);
         }
@@ -99,12 +100,13 @@ public class MessagePackParser
             // MessagePackParser needs to use the MessageUnpacker that has the same InputStream
             // since it has buffer which has loaded the InputStream data ahead.
             // However, it needs to call MessageUnpacker#reset when the source is different from the previous one.
-            if (StreamReadFeature.AUTO_CLOSE_SOURCE.enabledIn(streamReadFeatures) || messageUnpackerTuple.first() != src || src instanceof byte[]) {
+            Object cachedSrc = messageUnpackerTuple.first().get();
+            if (StreamReadFeature.AUTO_CLOSE_SOURCE.enabledIn(streamReadFeatures) || cachedSrc != src || src instanceof byte[]) {
                 messageUnpackerTuple.second().reset(input);
             }
             messageUnpacker = messageUnpackerTuple.second();
         }
-        messageUnpackerHolder.set(new Tuple<>(src, messageUnpacker));
+        messageUnpackerHolder.set(new Tuple<>(new WeakReference<>(src), messageUnpacker));
         ownsThreadLocalUnpacker = true;
     }
 
@@ -691,15 +693,15 @@ public class MessagePackParser
         finally {
             isClosed = true;
             if (ownsThreadLocalUnpacker) {
-                Tuple<Object, MessageUnpacker> tuple = messageUnpackerHolder.get();
-                if (tuple != null && tuple.first() instanceof byte[]) {
+                Tuple<WeakReference<Object>, MessageUnpacker> tuple = messageUnpackerHolder.get();
+                if (tuple != null && tuple.first().get() instanceof byte[]) {
                     try {
                         tuple.second().close();
                     }
                     catch (IOException e) {
                         throw _wrapIOFailure(e);
                     }
-                    messageUnpackerHolder.set(new Tuple<>(null, tuple.second()));
+                    messageUnpackerHolder.set(new Tuple<>(new WeakReference<>(null), tuple.second()));
                 }
             }
         }
