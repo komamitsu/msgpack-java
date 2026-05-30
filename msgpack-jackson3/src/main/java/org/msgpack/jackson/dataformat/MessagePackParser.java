@@ -102,6 +102,9 @@ public class MessagePackParser
             // However, it needs to call MessageUnpacker#reset when the source is different from the previous one.
             Object cachedSrc = messageUnpackerTuple.first().get();
             if (StreamReadFeature.AUTO_CLOSE_SOURCE.enabledIn(streamReadFeatures) || cachedSrc != src || src instanceof byte[]) {
+                // reset() replaces the internal MessageBufferInput and clears the unpacker's
+                // internal read buffer to EMPTY_BUFFER. The old ArrayBufferInput becomes
+                // unreachable here (we discard the return value), so its byte[] is GC-eligible.
                 messageUnpackerTuple.second().reset(input);
             }
             messageUnpacker = messageUnpackerTuple.second();
@@ -702,6 +705,9 @@ public class MessagePackParser
                 Tuple<WeakReference<Object>, MessageUnpacker> tuple = messageUnpackerHolder.get();
                 if (tuple != null && tuple.first().get() instanceof byte[]) {
                     try {
+                        // close() calls ArrayBufferInput.close() which sets buffer = null,
+                        // releasing the byte[] payload reference held by the unpacker's input.
+                        // The unpacker itself is kept alive for reuse on the next parse.
                         tuple.second().close();
                     }
                     catch (IOException e) {

@@ -1006,6 +1006,10 @@ public class MessagePackGenerator
             OutputStreamBufferOutput buf = ref != null ? ref.get() : null;
             if (buf != null) {
                 try {
+                    // reset(null) clears the OutputStream reference inside OutputStreamBufferOutput
+                    // but intentionally retains its internal MessageBuffer for reuse on the next
+                    // generator created on this thread. The MessageBuffer is reclaimed when the
+                    // WeakReference is collected after this generator instance is GC'd.
                     buf.reset(null);
                 }
                 catch (IOException e) {
