@@ -174,10 +174,11 @@ both bugs compound).
 retains the entire last parsed payload for each thread in a pool indefinitely, which
 can cause unbounded memory retention after large messages.
 
-Fixed in msgpack-jackson3: on `close()`, if the cached source is a `byte[]`, it is
-replaced with `null` in the ThreadLocal (keeping the unpacker alive for reuse but
-releasing the byte-array reference). InputStream sources are left unchanged because
-they are needed to detect same-stream reuse. Needs the same fix in msgpack-jackson.
+Fixed in msgpack-jackson3: sources are now wrapped in `WeakReference` so GC can reclaim
+them once the caller drops its reference. On `close()`, byte-array sources are replaced
+with `WeakReference(null)` for prompt release; InputStream sources are left alive in the
+WeakReference as long as the caller holds them, preserving same-stream reuse detection.
+Needs the same fix in msgpack-jackson.
 
 ## 3. `MessagePackGenerator`: `close()` does not set `isClosed()` to true
 
@@ -410,4 +411,25 @@ count to be wrong.
 
 **Practical impact:** Low. Nil keys in MessagePack maps are unusual, and most real-world
 data uses string or integer keys. Affects both modules identically.
+
+## 20. `MessagePackParser`: numeric accessors NPE on structural tokens
+
+**Files:**
+- `msgpack-jackson/src/main/java/org/msgpack/jackson/dataformat/MessagePackParser.java`
+- `msgpack-jackson3/src/main/java/org/msgpack/jackson/dataformat/MessagePackParser.java` — FIXED
+
+When `type` is Java `null` (i.e. the current token is a structural token such as
+`START_OBJECT` or `END_ARRAY`), all numeric accessor methods (`getIntValue()`,
+`getLongValue()`, etc.) perform `switch (type)` which throws `NullPointerException`
+instead of a descriptive `StreamReadException`. `ParserBase`-based parsers (e.g.
+CBORParser) avoid this via `_checkNumericValue()` / `_numTypesValid`. `getNumberType()`
+should return `null` for non-numeric tokens (matching CBORParser); all other numeric
+accessors should throw a descriptive error.
+
+Fixed in msgpack-jackson3 (commit ccee0c33): `if (type == null)` guards added to all
+eight numeric accessors; `testNumericAccessorsOnStructuralTokenThrow` covers the path.
+Needs the same fix in msgpack-jackson.
+
+**Practical impact:** Low. Jackson databind always checks `currentToken()` before calling
+numeric accessors, so this NPE is only reachable via direct streaming API misuse.
 
