@@ -361,3 +361,36 @@ serialization paths and adds significant complexity.
 Document the caveat and leave `size` ignored for now. If implemented in the future, both modules
 should be updated together.
 
+## 16. `MessagePackParser`: `getText()` returns stale value after NIL or BOOLEAN token
+
+**Files:**
+- `msgpack-jackson/src/main/java/org/msgpack/jackson/dataformat/MessagePackParser.java` (getText)
+- `msgpack-jackson3/src/main/java/org/msgpack/jackson/dataformat/MessagePackParser.java` — FIXED
+
+The `type` field is not reset for NIL or BOOLEAN tokens. After parsing a null or boolean value,
+calling `getText()` / `getString()` returns stale data from the previous token instead of null /
+"true" / "false". Fixed in msgpack-jackson3 by setting `type = null` in both cases and checking
+`_currToken` at the top of `getString()`. Needs the same fix in msgpack-jackson.
+
+## 17. `MessagePackExtensionType`: constructor accepts null `data`
+
+**Files:**
+- `msgpack-jackson/src/main/java/org/msgpack/jackson/dataformat/MessagePackExtensionType.java`
+- `msgpack-jackson3/src/main/java/org/msgpack/jackson/dataformat/MessagePackExtensionType.java` — FIXED
+
+The constructor stores `data` without a null check. A null `data` value causes NPE during
+serialization in `MessagePackGenerator` (at `extData.length`) or produces a misleading string
+from `toString()`. Fixed in msgpack-jackson3 by adding `Objects.requireNonNull(data, "data")`.
+Needs the same fix in msgpack-jackson.
+
+## 18. `MessagePackDataformatForPojoTest`: enum assertion checks fixture, not deserialized value
+
+**Files:**
+- `msgpack-jackson/src/test/java/org/msgpack/jackson/dataformat/MessagePackDataformatForPojoTest.java:48`
+- `msgpack-jackson3/src/test/java/org/msgpack/jackson/dataformat/MessagePackDataformatForPojoTest.java` — FIXED
+
+`assertEquals(normalPojo.suit, Suit.HEART)` compares the fixture to a constant, not the
+deserialized `value.suit`. Enum serialization/deserialization could be broken without this test
+detecting it. Fixed in msgpack-jackson3 to `assertEquals(normalPojo.suit, value.suit)`.
+Needs the same fix in msgpack-jackson.
+
