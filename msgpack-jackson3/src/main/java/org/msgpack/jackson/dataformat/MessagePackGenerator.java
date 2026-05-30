@@ -812,19 +812,28 @@ public class MessagePackGenerator
             }
 
             try {
-                double d = Double.parseDouble(encodedValue);
-                addValueNode(d);
-                return this;
-            }
-            catch (NumberFormatException ignored) {
-            }
+                BigDecimal bd = new BigDecimal(encodedValue);
+                double d = bd.doubleValue();
 
-            try {
-                BigDecimal bc = new BigDecimal(encodedValue);
-                addValueNode(bc);
+                // Check if the double can perfectly represent the exact decimal value.
+                if (bd.compareTo(new BigDecimal(String.valueOf(d))) == 0) {
+                    // It's a safe ordinary floating-point number.
+                    addValueNode(d);
+                }
+                else {
+                    // It has more precision than a double can handle.
+                    addValueNode(bd);
+                }
                 return this;
             }
-            catch (NumberFormatException ignored) {
+            catch (NumberFormatException e) {
+                // Fall back for NaN, Infinity, -Infinity which BigDecimal rejects.
+                try {
+                    double d = Double.parseDouble(encodedValue);
+                    addValueNode(d);
+                }
+                catch (NumberFormatException ignored) {
+                }
             }
 
             throw new NumberFormatException(encodedValue);
