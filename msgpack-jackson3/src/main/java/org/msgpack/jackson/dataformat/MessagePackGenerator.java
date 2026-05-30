@@ -77,6 +77,7 @@ public class MessagePackGenerator
 
     private abstract static class Node
     {
+        // Root containers have -1.
         final int parentIndex;
 
         public Node(int parentIndex)
@@ -91,6 +92,7 @@ public class MessagePackGenerator
 
     private abstract static class NodeContainer extends Node
     {
+        // Only for containers.
         int childCount;
 
         public NodeContainer(int parentIndex)
@@ -159,6 +161,7 @@ public class MessagePackGenerator
     private static final class NodeEntryInObject extends Node
     {
         final Object key;
+        // Lazily initialized.
         Object value;
 
         public NodeEntryInObject(int parentIndex, Object key)
@@ -446,6 +449,7 @@ public class MessagePackGenerator
         MessagePacker messagePacker = getMessagePacker();
         boolean failedToPackAsBI = false;
         try {
+            //Check to see if this BigDecimal can be converted to BigInteger
             BigInteger integer = decimal.toBigIntegerExact();
             messagePacker.packBigInteger(integer);
         }
@@ -455,6 +459,7 @@ public class MessagePackGenerator
 
         if (failedToPackAsBI) {
             double doubleValue = decimal.doubleValue();
+            //Check to make sure this BigDecimal can be represented as a double
             if (Double.isInfinite(doubleValue) || decimal.compareTo(BigDecimal.valueOf(doubleValue)) != 0) {
                 throw new IllegalArgumentException("MessagePack cannot serialize a BigDecimal that can't be represented as double. " + decimal);
             }
@@ -786,6 +791,9 @@ public class MessagePackGenerator
     @Override
     public JsonGenerator writeNumber(String encodedValue) throws JacksonException
     {
+        // There is a room to improve this API's performance while the implementation is robust.
+        // If users can use other MessagePackGenerator#writeNumber APIs that accept
+        // proper numeric types not String, it's better to use the other APIs instead.
         try {
             try {
                 long l = Long.parseLong(encodedValue);
@@ -873,6 +881,7 @@ public class MessagePackGenerator
     public void flush() throws JacksonException
     {
         if (!isElementsClosed) {
+            // The whole elements are not closed yet.
             return;
         }
 

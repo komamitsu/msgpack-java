@@ -94,6 +94,10 @@ public class MessagePackParser
             messageUnpacker = MessagePack.newDefaultUnpacker(input);
         }
         else {
+            // Considering to reuse InputStream with StreamReadFeature.AUTO_CLOSE_SOURCE,
+            // MessagePackParser needs to use the MessageUnpacker that has the same InputStream
+            // since it has buffer which has loaded the InputStream data ahead.
+            // However, it needs to call MessageUnpacker#reset when the source is different from the previous one.
             if (StreamReadFeature.AUTO_CLOSE_SOURCE.enabledIn(streamReadFeatures) || messageUnpackerTuple.first() != src || src instanceof byte[]) {
                 messageUnpackerTuple.second().reset(input);
             }
@@ -593,6 +597,7 @@ public class MessagePackParser
     @Override
     public String currentName()
     {
+        // Simple, but need to look for START_OBJECT/ARRAY's "off-by-one" thing:
         if (_currToken == JsonToken.START_OBJECT || _currToken == JsonToken.START_ARRAY) {
             MessagePackReadContext parent = streamReadContext.getParent();
             return parent.currentName();
