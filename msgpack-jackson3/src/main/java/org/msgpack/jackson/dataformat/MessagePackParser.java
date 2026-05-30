@@ -212,10 +212,12 @@ public class MessagePackParser
                 }
                 break;
             case NIL:
+                type = null;
                 messageUnpacker.unpackNil();
                 nextToken = JsonToken.VALUE_NULL;
                 break;
             case BOOLEAN:
+                type = null;
                 boolean b = messageUnpacker.unpackBoolean();
                 if (isObjectValueSet) {
                     streamReadContext.setCurrentName(Boolean.toString(b));
@@ -290,6 +292,15 @@ public class MessagePackParser
     @Override
     public String getString()
     {
+        if (_currToken == JsonToken.VALUE_NULL) {
+            return null;
+        }
+        if (_currToken == JsonToken.VALUE_TRUE) {
+            return Boolean.TRUE.toString();
+        }
+        if (_currToken == JsonToken.VALUE_FALSE) {
+            return Boolean.FALSE.toString();
+        }
         switch (type) {
             case STRING:
                 return stringValue;

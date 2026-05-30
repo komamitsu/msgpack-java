@@ -1124,8 +1124,8 @@ public class MessagePackParserTest
         assertEquals(Arrays.asList(1, 2, 3), first);
 
         // Second parse with the same byte[] instance and AUTO_CLOSE_SOURCE disabled.
-        // The unpacker is not reset (src identity match, no AUTO_CLOSE_SOURCE trigger),
-        // so it continues from EOF and fails to produce the expected result.
+        // The byte[] source always triggers an unpacker reset (|| src instanceof byte[]),
+        // so the second parse succeeds and returns the correct result.
         List<Integer> second = objectMapper.readValue(bytes, new TypeReference<List<Integer>>() {});
         assertEquals(Arrays.asList(1, 2, 3), second);
     }

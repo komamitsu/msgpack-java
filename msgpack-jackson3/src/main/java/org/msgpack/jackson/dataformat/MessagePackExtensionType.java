@@ -21,6 +21,7 @@ import tools.jackson.databind.annotation.JsonSerialize;
 import tools.jackson.databind.ser.std.StdSerializer;
 
 import java.util.Arrays;
+import java.util.Objects;
 
 @JsonSerialize(using = MessagePackExtensionType.Serializer.class)
 public class MessagePackExtensionType
@@ -31,7 +32,7 @@ public class MessagePackExtensionType
     public MessagePackExtensionType(byte type, byte[] data)
     {
         this.type = type;
-        this.data = data;
+        this.data = Objects.requireNonNull(data, "data");
     }
 
     public byte getType()
@@ -73,7 +74,7 @@ public class MessagePackExtensionType
     @Override
     public String toString()
     {
-        return "MessagePackExtensionType(type=" + type + ", data.length=" + (data == null ? 0 : data.length) + ")";
+        return "MessagePackExtensionType(type=" + type + ", data.length=" + data.length + ")";
     }
 
     public static class Serializer extends StdSerializer<MessagePackExtensionType>
