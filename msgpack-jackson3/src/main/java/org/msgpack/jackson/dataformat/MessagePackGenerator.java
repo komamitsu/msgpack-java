@@ -824,12 +824,13 @@ public class MessagePackGenerator
                 double d = bd.doubleValue();
 
                 // Check if the double can perfectly represent the exact decimal value.
-                if (bd.compareTo(new BigDecimal(String.valueOf(d))) == 0) {
+                // isInfinite guard: values like "1e309" overflow double to Infinity; keep as BigDecimal.
+                if (!Double.isInfinite(d) && bd.compareTo(new BigDecimal(String.valueOf(d))) == 0) {
                     // It's a safe ordinary floating-point number.
                     addValueNode(d);
                 }
                 else {
-                    // It has more precision than a double can handle.
+                    // It has more precision than a double can handle, or overflows double range.
                     addValueNode(bd);
                 }
                 return this;

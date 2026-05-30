@@ -360,6 +360,9 @@ public class MessagePackParser
     @Override
     public byte[] getBinaryValue(Base64Variant b64variant)
     {
+        if (type == null) {
+            return _reportError("Current token (" + _currToken + ") not of binary type");
+        }
         switch (type) {
             case BYTES:
                 return bytesValue;
@@ -611,6 +614,9 @@ public class MessagePackParser
     @Override
     public Object getEmbeddedObject()
     {
+        if (type == null) {
+            return _reportError("Current token (" + _currToken + ") not of embeddable type");
+        }
         switch (type) {
             case BYTES:
                 return bytesValue;
