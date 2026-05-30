@@ -55,7 +55,6 @@ public class MessagePackParser
     private long currentPosition;
     private final IOContext ioContext;
     private ExtensionTypeCustomDeserializers extTypeCustomDesers;
-    private final boolean ownsThreadLocalUnpacker;
 
     private enum Type
     {
@@ -87,7 +86,6 @@ public class MessagePackParser
         streamReadContext = MessagePackReadContext.createRootContext(dups);
         if (!reuseResourceInParser) {
             messageUnpacker = MessagePack.newDefaultUnpacker(input);
-            ownsThreadLocalUnpacker = false;
             return;
         }
 
@@ -111,7 +109,6 @@ public class MessagePackParser
             messageUnpacker = messageUnpackerTuple.second();
         }
         messageUnpackerHolder.set(new WeakReference<>(new Tuple<>(src, messageUnpacker)));
-        ownsThreadLocalUnpacker = true;
     }
 
     public void setExtensionTypeCustomDeserializers(ExtensionTypeCustomDeserializers extTypeCustomDesers)
@@ -675,17 +672,6 @@ public class MessagePackParser
     {
         if (StreamReadFeature.AUTO_CLOSE_SOURCE.enabledIn(_streamReadFeatures)) {
             messageUnpacker.close();
-        }
-        if (ownsThreadLocalUnpacker) {
-            WeakReference<Tuple<Object, MessageUnpacker>> ref = messageUnpackerHolder.get();
-            Tuple<Object, MessageUnpacker> tuple = ref != null ? ref.get() : null;
-            if (tuple != null && tuple.first() instanceof byte[]) {
-                // close() calls ArrayBufferInput.close() which sets buffer = null,
-                // releasing the byte[] payload reference held by the unpacker's input.
-                // The unpacker itself is kept alive for reuse on the next parse.
-                tuple.second().close();
-                messageUnpackerHolder.set(new WeakReference<>(new Tuple<>(null, tuple.second())));
-            }
         }
     }
 
