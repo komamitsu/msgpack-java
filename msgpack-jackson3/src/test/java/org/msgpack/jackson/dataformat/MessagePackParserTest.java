@@ -1324,6 +1324,57 @@ public class MessagePackParserTest
     }
 
     @Test
+    public void testNumericAccessorsOnStructuralTokenThrow() throws IOException
+    {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (MessagePacker packer = MessagePack.newDefaultPacker(out)) {
+            packer.packMapHeader(0);
+        }
+        byte[] bytes = out.toByteArray();
+        MessagePackFactory factory = new MessagePackFactory();
+
+        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+            assertEquals(JsonToken.START_OBJECT, p.nextToken());
+            try {
+                p.getIntValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+            try {
+                p.getLongValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+            try {
+                p.getDoubleValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+            try {
+                p.getFloatValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+            try {
+                p.getBigIntegerValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+            try {
+                p.getDecimalValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+            try {
+                p.getNumberValue();
+                fail("expected exception");
+            }
+            catch (JacksonException ignored) { }
+            assertNull(p.getNumberType());
+        }
+    }
+
+    @Test
     public void testGetIntValueFromFractionalDoubleTruncates() throws IOException
     {
         ByteArrayOutputStream out = new ByteArrayOutputStream();

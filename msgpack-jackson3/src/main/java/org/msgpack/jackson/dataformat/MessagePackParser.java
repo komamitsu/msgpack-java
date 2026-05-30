@@ -380,6 +380,9 @@ public class MessagePackParser
     @Override
     public Number getNumberValue()
     {
+        if (type == null) {
+            return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
+        }
         switch (type) {
             case INT:
                 return intValue;
@@ -403,6 +406,9 @@ public class MessagePackParser
     @Override
     public int getIntValue()
     {
+        if (type == null) {
+            return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
+        }
         switch (type) {
             case INT:
                 return intValue;
@@ -440,6 +446,9 @@ public class MessagePackParser
     @Override
     public long getLongValue()
     {
+        if (type == null) {
+            return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
+        }
         switch (type) {
             case INT:
                 return intValue;
@@ -474,6 +483,9 @@ public class MessagePackParser
     @Override
     public BigInteger getBigIntegerValue()
     {
+        if (type == null) {
+            return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
+        }
         switch (type) {
             case INT:
                 return BigInteger.valueOf(intValue);
@@ -502,6 +514,9 @@ public class MessagePackParser
     {
         // No bounds/range check: a finite double or large BigInteger may overflow to
         // Float.POSITIVE_INFINITY. This is intentional — same as ParserBase and CBORParser.
+        if (type == null) {
+            return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
+        }
         switch (type) {
             case INT:
                 return (float) intValue;
@@ -527,6 +542,9 @@ public class MessagePackParser
     {
         // No bounds/range check: large BigInteger may overflow to Double.POSITIVE_INFINITY,
         // and large long values may lose precision. Intentional — same as ParserBase.
+        if (type == null) {
+            return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
+        }
         switch (type) {
             case INT:
                 return intValue;
@@ -550,6 +568,9 @@ public class MessagePackParser
     @Override
     public BigDecimal getDecimalValue()
     {
+        if (type == null) {
+            return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
+        }
         switch (type) {
             case INT:
                 return BigDecimal.valueOf(intValue);
@@ -614,6 +635,9 @@ public class MessagePackParser
     @Override
     public NumberType getNumberType()
     {
+        if (type == null) {
+            return null;
+        }
         switch (type) {
             case INT:
                 return NumberType.INT;
