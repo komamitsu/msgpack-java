@@ -394,3 +394,20 @@ deserialized `value.suit`. Enum serialization/deserialization could be broken wi
 detecting it. Fixed in msgpack-jackson3 to `assertEquals(normalPojo.suit, value.suit)`.
 Needs the same fix in msgpack-jackson.
 
+## 19. `MessagePackParser`: nil map key emitted as `VALUE_NULL` instead of `PROPERTY_NAME`
+
+**Files:**
+- `msgpack-jackson/src/main/java/org/msgpack/jackson/dataformat/MessagePackParser.java`
+- `msgpack-jackson3/src/main/java/org/msgpack/jackson/dataformat/MessagePackParser.java`
+
+When a MessagePack map contains a nil key, the NIL case in `_nextToken()` unconditionally
+returns `VALUE_NULL` regardless of whether the parser is reading a key or a value. When
+reading a key (`isObjectValueSet == true`), it should call
+`streamReadContext.setCurrentName(...)` and return `PROPERTY_NAME` instead, matching the
+behaviour of the INTEGER, FLOAT, BOOLEAN, STRING, and EXTENSION key branches. The
+desynchronisation causes the subsequent value to be misinterpreted and the object's entry
+count to be wrong.
+
+**Practical impact:** Low. Nil keys in MessagePack maps are unusual, and most real-world
+data uses string or integer keys. Affects both modules identically.
+
