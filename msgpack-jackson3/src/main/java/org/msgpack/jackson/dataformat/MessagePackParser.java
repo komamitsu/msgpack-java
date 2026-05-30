@@ -23,7 +23,7 @@ import tools.jackson.core.StreamReadFeature;
 import tools.jackson.core.TokenStreamContext;
 import tools.jackson.core.TokenStreamLocation;
 import tools.jackson.core.Version;
-import tools.jackson.core.base.ParserMinimalBase;
+import tools.jackson.core.base.ParserBase;
 import tools.jackson.core.exc.UnexpectedEndOfInputException;
 import tools.jackson.core.io.IOContext;
 import tools.jackson.core.json.DupDetector;
@@ -39,7 +39,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 
 public class MessagePackParser
-        extends ParserMinimalBase
+        extends ParserBase
 {
     private static final ThreadLocal<Tuple<Object, MessageUnpacker>> messageUnpackerHolder = new ThreadLocal<>();
     private final MessageUnpacker messageUnpacker;
@@ -49,7 +49,6 @@ public class MessagePackParser
 
     private MessagePackReadContext streamReadContext;
 
-    private boolean isClosed;
     private long tokenPosition;
     private long currentPosition;
     private final IOContext ioContext;
@@ -61,13 +60,9 @@ public class MessagePackParser
         INT, LONG, DOUBLE, STRING, BYTES, BOOL, BIG_INT, EXT, NULL
     }
     private Type type;
-    private int intValue;
-    private long longValue;
-    private double doubleValue;
     private boolean booleanValue;
     private byte[] bytesValue;
     private String stringValue;
-    private BigInteger biValue;
     private MessagePackExtensionType extensionTypeValue;
 
     MessagePackParser(ObjectReadContext readCtxt,
@@ -137,6 +132,7 @@ public class MessagePackParser
 
     private JsonToken _nextToken() throws IOException
     {
+        _numTypesValid = NR_UNKNOWN;
         tokenPosition = messageUnpacker.getTotalReadBytes();
 
         boolean isObjectValueSet = streamReadContext.inObject() && _currToken != JsonToken.PROPERTY_NAME;
@@ -184,26 +180,30 @@ public class MessagePackParser
                         BigInteger bi = messageUnpacker.unpackBigInteger();
                         if (0 <= bi.compareTo(LONG_MIN) && bi.compareTo(LONG_MAX) <= 0) {
                             type = Type.LONG;
-                            longValue = bi.longValue();
-                            v = longValue;
+                            _numberLong = bi.longValue();
+                            _numTypesValid = NR_LONG;
+                            v = _numberLong;
                         }
                         else {
                             type = Type.BIG_INT;
-                            biValue = bi;
-                            v = biValue;
+                            _numberBigInt = bi;
+                            _numTypesValid = NR_BIGINT;
+                            v = _numberBigInt;
                         }
                         break;
                     default:
                         long l = messageUnpacker.unpackLong();
                         if (Integer.MIN_VALUE <= l && l <= Integer.MAX_VALUE) {
                             type = Type.INT;
-                            intValue = (int) l;
-                            v = intValue;
+                            _numberInt = (int) l;
+                            _numTypesValid = NR_INT;
+                            v = _numberInt;
                         }
                         else {
                             type = Type.LONG;
-                            longValue = l;
-                            v = longValue;
+                            _numberLong = l;
+                            _numTypesValid = NR_LONG;
+                            v = _numberLong;
                         }
                         break;
                 }
@@ -235,9 +235,10 @@ public class MessagePackParser
                 break;
             case FLOAT:
                 type = Type.DOUBLE;
-                doubleValue = messageUnpacker.unpackDouble();
+                _numberDouble = messageUnpacker.unpackDouble();
+                _numTypesValid = NR_DOUBLE;
                 if (isObjectValueSet) {
-                    streamReadContext.setCurrentName(String.valueOf(doubleValue));
+                    streamReadContext.setCurrentName(String.valueOf(_numberDouble));
                     nextToken = JsonToken.PROPERTY_NAME;
                 }
                 else {
@@ -304,15 +305,15 @@ public class MessagePackParser
             case BYTES:
                 return new String(bytesValue, MessagePack.UTF8);
             case INT:
-                return String.valueOf(intValue);
+                return String.valueOf(_numberInt);
             case LONG:
-                return String.valueOf(longValue);
+                return String.valueOf(_numberLong);
             case DOUBLE:
-                return String.valueOf(doubleValue);
+                return String.valueOf(_numberDouble);
             case BOOL:
                 return Boolean.toString(booleanValue);
             case BIG_INT:
-                return String.valueOf(biValue);
+                return String.valueOf(_numberBigInt);
             case EXT:
                 try {
                     return deserializedExtensionTypeValue().toString();
@@ -373,200 +374,101 @@ public class MessagePackParser
         }
     }
 
+    // getNumberValue(), getFloatValue(), getDoubleValue() are inherited from ParserBase.
+
     @Override
-    public Number getNumberValue()
+    public int getIntValue() throws JacksonException
     {
-        switch (type) {
-            case INT:
-                return intValue;
-            case LONG:
-                return longValue;
-            case DOUBLE:
-                return doubleValue;
-            case BIG_INT:
-                return biValue;
-            case NULL:
-            case BOOL:
-            case STRING:
-            case BYTES:
-            case EXT:
-                return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
-            default:
-                return _reportError("Unexpected MessagePack value type: " + type);
+        if ((_numTypesValid & NR_INT) != 0) {
+            return _numberInt;
         }
+        if (_numTypesValid == NR_UNKNOWN) {
+            _parseNumericValue(NR_INT);
+        }
+        if ((_numTypesValid & NR_INT) == 0) {
+            // Conversion from LONG, DOUBLE, or BIGINT — need NaN/range checks.
+            if ((_numTypesValid & NR_DOUBLE) != 0) {
+                if (!Double.isFinite(_numberDouble)) {
+                    return _reportError("Cannot convert non-finite double (" + _numberDouble + ") to `int`");
+                }
+                if (_numberDouble < Integer.MIN_VALUE || _numberDouble > Integer.MAX_VALUE) {
+                    return _reportError("Numeric value (" + _numberDouble + ") out of range for `int`");
+                }
+            }
+            convertNumberToInt();
+        }
+        return _numberInt;
     }
 
     @Override
-    public int getIntValue()
+    public long getLongValue() throws JacksonException
     {
-        switch (type) {
-            case INT:
-                return intValue;
-            case LONG:
-                if (longValue < Integer.MIN_VALUE || longValue > Integer.MAX_VALUE) {
-                    return _reportError("Numeric value (" + longValue + ") out of range for `int`");
-                }
-                return (int) longValue;
-            case DOUBLE:
-                if (!Double.isFinite(doubleValue)) {
-                    return _reportError("Cannot convert non-finite double (" + doubleValue + ") to `int`");
-                }
-                if (doubleValue < Integer.MIN_VALUE || doubleValue > Integer.MAX_VALUE) {
-                    return _reportError("Numeric value (" + doubleValue + ") out of range for `int`");
-                }
-                return (int) doubleValue;
-            case BIG_INT:
-                try {
-                    return biValue.intValueExact();
-                }
-                catch (ArithmeticException e) {
-                    return _reportError("Numeric value (" + biValue + ") out of range for `int`");
-                }
-            case NULL:
-            case BOOL:
-            case STRING:
-            case BYTES:
-            case EXT:
-                return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
-            default:
-                return _reportError("Unexpected MessagePack value type: " + type);
+        if ((_numTypesValid & NR_LONG) != 0) {
+            return _numberLong;
         }
+        if (_numTypesValid == NR_UNKNOWN) {
+            _parseNumericValue(NR_LONG);
+        }
+        if ((_numTypesValid & NR_LONG) == 0) {
+            if ((_numTypesValid & NR_DOUBLE) != 0) {
+                if (!Double.isFinite(_numberDouble)) {
+                    return _reportError("Cannot convert non-finite double (" + _numberDouble + ") to `long`");
+                }
+                if (_numberDouble < Long.MIN_VALUE || _numberDouble > Long.MAX_VALUE) {
+                    return _reportError("Numeric value (" + _numberDouble + ") out of range for `long`");
+                }
+            }
+            convertNumberToLong();
+        }
+        return _numberLong;
     }
 
     @Override
-    public long getLongValue()
+    public BigInteger getBigIntegerValue() throws JacksonException
     {
-        switch (type) {
-            case INT:
-                return intValue;
-            case LONG:
-                return longValue;
-            case DOUBLE:
-                if (!Double.isFinite(doubleValue)) {
-                    return _reportError("Cannot convert non-finite double (" + doubleValue + ") to `long`");
-                }
-                if (doubleValue < Long.MIN_VALUE || doubleValue > Long.MAX_VALUE) {
-                    return _reportError("Numeric value (" + doubleValue + ") out of range for `long`");
-                }
-                return (long) doubleValue;
-            case BIG_INT:
-                try {
-                    return biValue.longValueExact();
-                }
-                catch (ArithmeticException e) {
-                    return _reportError("Numeric value (" + biValue + ") out of range for `long`");
-                }
-            case NULL:
-            case BOOL:
-            case STRING:
-            case BYTES:
-            case EXT:
-                return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
-            default:
-                return _reportError("Unexpected MessagePack value type: " + type);
+        if ((_numTypesValid & NR_BIGINT) != 0) {
+            return _numberBigInt;
         }
+        if (_numTypesValid == NR_UNKNOWN) {
+            _parseNumericValue(NR_BIGINT);
+        }
+        if ((_numTypesValid & NR_BIGINT) == 0) {
+            if ((_numTypesValid & NR_DOUBLE) != 0) {
+                if (!Double.isFinite(_numberDouble)) {
+                    return _reportError("Cannot convert non-finite double (" + _numberDouble + ") to BigInteger");
+                }
+                // truncates fractional part
+                _numberBigInt = BigDecimal.valueOf(_numberDouble).toBigInteger();
+                _numTypesValid |= NR_BIGINT;
+                return _numberBigInt;
+            }
+            convertNumberToBigInteger();
+        }
+        return _numberBigInt;
     }
 
     @Override
-    public BigInteger getBigIntegerValue()
+    public BigDecimal getDecimalValue() throws JacksonException
     {
-        switch (type) {
-            case INT:
-                return BigInteger.valueOf(intValue);
-            case LONG:
-                return BigInteger.valueOf(longValue);
-            case DOUBLE:
-                if (!Double.isFinite(doubleValue)) {
-                    return _reportError("Cannot convert non-finite double (" + doubleValue + ") to BigInteger");
+        if ((_numTypesValid & NR_BIGDECIMAL) != 0) {
+            return _numberBigDecimal;
+        }
+        if (_numTypesValid == NR_UNKNOWN) {
+            _parseNumericValue(NR_BIGDECIMAL);
+        }
+        if ((_numTypesValid & NR_BIGDECIMAL) == 0) {
+            if ((_numTypesValid & NR_DOUBLE) != 0) {
+                if (!Double.isFinite(_numberDouble)) {
+                    return _reportError("Cannot convert non-finite double (" + _numberDouble + ") to BigDecimal");
                 }
-                return BigDecimal.valueOf(doubleValue).toBigInteger(); // truncates fractional part
-            case BIG_INT:
-                return biValue;
-            case NULL:
-            case BOOL:
-            case STRING:
-            case BYTES:
-            case EXT:
-                return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
-            default:
-                return _reportError("Unexpected MessagePack value type: " + type);
+                // bypass ParserBase's text-based conversion to avoid parsing "NaN"/"Infinity"
+                _numberBigDecimal = BigDecimal.valueOf(_numberDouble);
+                _numTypesValid |= NR_BIGDECIMAL;
+                return _numberBigDecimal;
+            }
+            convertNumberToBigDecimal();
         }
-    }
-
-    @Override
-    public float getFloatValue()
-    {
-        // No bounds/range check: a finite double or large BigInteger may overflow to
-        // Float.POSITIVE_INFINITY. This is intentional — same as ParserBase and CBORParser.
-        switch (type) {
-            case INT:
-                return (float) intValue;
-            case LONG:
-                return (float) longValue;
-            case DOUBLE:
-                return (float) doubleValue;
-            case BIG_INT:
-                return biValue.floatValue();
-            case NULL:
-            case BOOL:
-            case STRING:
-            case BYTES:
-            case EXT:
-                return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
-            default:
-                return _reportError("Unexpected MessagePack value type: " + type);
-        }
-    }
-
-    @Override
-    public double getDoubleValue()
-    {
-        // No bounds/range check: large BigInteger may overflow to Double.POSITIVE_INFINITY,
-        // and large long values may lose precision. Intentional — same as ParserBase.
-        switch (type) {
-            case INT:
-                return intValue;
-            case LONG:
-                return (double) longValue;
-            case DOUBLE:
-                return doubleValue;
-            case BIG_INT:
-                return biValue.doubleValue();
-            case NULL:
-            case BOOL:
-            case STRING:
-            case BYTES:
-            case EXT:
-                return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
-            default:
-                return _reportError("Unexpected MessagePack value type: " + type);
-        }
-    }
-
-    @Override
-    public BigDecimal getDecimalValue()
-    {
-        switch (type) {
-            case INT:
-                return BigDecimal.valueOf(intValue);
-            case LONG:
-                return BigDecimal.valueOf(longValue);
-            case DOUBLE:
-                if (!Double.isFinite(doubleValue)) {
-                    return _reportError("Cannot convert non-finite double (" + doubleValue + ") to BigDecimal");
-                }
-                return BigDecimal.valueOf(doubleValue);
-            case BIG_INT:
-                return new BigDecimal(biValue);
-            case NULL:
-            case BOOL:
-            case STRING:
-            case BYTES:
-            case EXT:
-                return _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
-            default:
-                return _reportError("Unexpected MessagePack value type: " + type);
-        }
+        return _numberBigDecimal;
     }
 
     private Object deserializedExtensionTypeValue()
@@ -610,24 +512,38 @@ public class MessagePackParser
     @Override
     public NumberType getNumberType()
     {
-        switch (type) {
-            case INT:
+        // Check _currToken directly (like CBORParser) to avoid _parseNumericValue()
+        // being called for non-numeric tokens.
+        if (_currToken == JsonToken.VALUE_NUMBER_INT) {
+            if ((_numTypesValid & NR_INT) != 0) {
                 return NumberType.INT;
-            case LONG:
+            }
+            if ((_numTypesValid & NR_LONG) != 0) {
                 return NumberType.LONG;
-            case DOUBLE:
-                return NumberType.DOUBLE;
-            case BIG_INT:
-                return NumberType.BIG_INTEGER;
-            case NULL:
-            case BOOL:
-            case STRING:
-            case BYTES:
-            case EXT:
-                return null;
-            default:
-                return _reportError("Unexpected MessagePack value type: " + type);
+            }
+            return NumberType.BIG_INTEGER;
         }
+        if (_currToken == JsonToken.VALUE_NUMBER_FLOAT) {
+            return NumberType.DOUBLE;
+        }
+        return null;
+    }
+
+    @Override
+    protected void _parseNumericValue(int expType) throws JacksonException
+    {
+        // No lazy decoding — numbers are fully parsed eagerly in _nextToken().
+        // If we get here the current token is not numeric.
+        if (_currToken != JsonToken.VALUE_NUMBER_INT && _currToken != JsonToken.VALUE_NUMBER_FLOAT) {
+            _reportError("Current token (" + _currToken + ") not numeric, cannot use numeric value accessors");
+        }
+    }
+
+    @Override
+    protected int _parseIntValue() throws JacksonException
+    {
+        _parseNumericValue(NR_INT);
+        return 0; // unreachable
     }
 
     @Override
@@ -641,12 +557,7 @@ public class MessagePackParser
     @Override
     protected void _releaseBuffers()
     {
-    }
-
-    @Override
-    public boolean isClosed()
-    {
-        return isClosed;
+        super._releaseBuffers();
     }
 
     @Override
@@ -659,7 +570,7 @@ public class MessagePackParser
             throw _wrapIOFailure(e);
         }
         finally {
-            isClosed = true;
+            _closed = true;
             if (ownsThreadLocalUnpacker) {
                 Tuple<Object, MessageUnpacker> tuple = messageUnpackerHolder.get();
                 if (tuple != null && tuple.first() instanceof byte[]) {
@@ -722,7 +633,7 @@ public class MessagePackParser
     public boolean isNaN()
     {
         if (type == Type.DOUBLE) {
-            return Double.isNaN(doubleValue) || Double.isInfinite(doubleValue);
+            return !Double.isFinite(_numberDouble);
         }
         return false;
     }
