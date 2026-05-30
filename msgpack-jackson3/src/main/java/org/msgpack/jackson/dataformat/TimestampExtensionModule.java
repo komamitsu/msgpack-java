@@ -52,6 +52,9 @@ public class TimestampExtensionModule
         public void serialize(Instant value, JsonGenerator gen, SerializationContext provider)
         {
             try {
+                // Per-call allocation is a known limitation carried from the v2 module.
+                // Manually encoding the timestamp bytes would avoid it but duplicates
+                // msgpack-core's timestamp logic. Tracked as a future optimization.
                 ByteArrayOutputStream os = new ByteArrayOutputStream();
                 try (MessagePacker packer = MessagePack.newDefaultPacker(os)) {
                     packer.packTimestamp(value);
@@ -81,6 +84,7 @@ public class TimestampExtensionModule
         public Instant deserialize(JsonParser p, DeserializationContext ctxt)
         {
             try {
+                // Per-call allocation is a known limitation — see serialize() above.
                 MessagePackExtensionType ext = p.readValueAs(MessagePackExtensionType.class);
                 if (ext.getType() != EXT_TYPE) {
                     ctxt.reportInputMismatch(Instant.class,

@@ -604,6 +604,9 @@ public class MessagePackGenerator
     {
         try {
             long remaining = len < 0 ? Long.MAX_VALUE : len;
+            // Cap chunk size: len is a caller hint and can be arbitrarily large.
+            // Pre-allocating new StringBuilder(len) would reserve len*2 bytes upfront,
+            // which is an OOM risk for large inputs. The StringBuilder grows as needed.
             int chunkSize = (int) Math.min(remaining, 8192);
             StringBuilder sb = new StringBuilder(chunkSize);
             char[] tmpBuf = new char[chunkSize];
@@ -992,6 +995,9 @@ public class MessagePackGenerator
     @Override
     protected void _releaseBuffers()
     {
+        // No null check on get(): generators are single-threaded by contract so this
+        // ThreadLocal is always set on the calling thread. A null here would indicate
+        // cross-thread misuse; letting it NPE surfaces that bug immediately.
         if (ownsThreadLocalBuffer) {
             try {
                 messageBufferOutputHolder.get().reset(null);

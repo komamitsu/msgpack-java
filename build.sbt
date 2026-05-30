@@ -103,6 +103,8 @@ val junitInterface = "com.github.sbt"    % "junit-interface"      % "0.13.3" % "
 // Project settings
 val isJava17Plus: Boolean = {
   val v = sys.props.getOrElse("java.specification.version", "1.8")
+  // getOrElse(false): non-numeric versions (e.g. early-access "17-ea") fail safe
+  // by not compiling the jackson3 module rather than making an optimistic guess.
   if (v.startsWith("1.")) false else scala.util.Try(v.toInt >= 17).getOrElse(false)
 }
 

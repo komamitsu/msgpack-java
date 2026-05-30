@@ -656,6 +656,8 @@ public class MessagePackParser
     @Override
     public void close()
     {
+        // Parsers are single-threaded by contract; close() is expected on the same
+        // thread that created the parser. Cross-thread close is not a supported use case.
         try {
             _closeInput();
         }
