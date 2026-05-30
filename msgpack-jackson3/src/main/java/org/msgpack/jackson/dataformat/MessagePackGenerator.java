@@ -353,6 +353,9 @@ public class MessagePackGenerator
         if (currentState != IN_OBJECT) {
             _reportError("Current context not an object but " + currentStateStr());
         }
+        if (writeContext.isExpectingValue()) {
+            _reportError("Cannot close Object, property name written but no value");
+        }
         endCurrentContainer();
         return this;
     }

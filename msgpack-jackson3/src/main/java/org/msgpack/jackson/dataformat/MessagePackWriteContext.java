@@ -80,6 +80,11 @@ class MessagePackWriteContext extends TokenStreamContext
         return parent;
     }
 
+    boolean isExpectingValue()
+    {
+        return _type == TYPE_OBJECT && gotName;
+    }
+
     boolean writeValue()
     {
         if (_type == TYPE_OBJECT) {
