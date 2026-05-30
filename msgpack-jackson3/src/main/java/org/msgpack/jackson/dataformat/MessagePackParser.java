@@ -42,7 +42,7 @@ import java.math.BigInteger;
 public class MessagePackParser
         extends ParserMinimalBase
 {
-    private static final ThreadLocal<Tuple<WeakReference<Object>, MessageUnpacker>> messageUnpackerHolder = new ThreadLocal<>();
+    private static final ThreadLocal<WeakReference<Tuple<Object, MessageUnpacker>>> messageUnpackerHolder = new ThreadLocal<>();
     private final MessageUnpacker messageUnpacker;
 
     private static final BigInteger LONG_MIN = BigInteger.valueOf(Long.MIN_VALUE);
@@ -91,7 +91,8 @@ public class MessagePackParser
             return;
         }
 
-        Tuple<WeakReference<Object>, MessageUnpacker> messageUnpackerTuple = messageUnpackerHolder.get();
+        WeakReference<Tuple<Object, MessageUnpacker>> ref = messageUnpackerHolder.get();
+        Tuple<Object, MessageUnpacker> messageUnpackerTuple = ref != null ? ref.get() : null;
         if (messageUnpackerTuple == null) {
             messageUnpacker = MessagePack.newDefaultUnpacker(input);
         }
@@ -100,7 +101,7 @@ public class MessagePackParser
             // MessagePackParser needs to use the MessageUnpacker that has the same InputStream
             // since it has buffer which has loaded the InputStream data ahead.
             // However, it needs to call MessageUnpacker#reset when the source is different from the previous one.
-            Object cachedSrc = messageUnpackerTuple.first().get();
+            Object cachedSrc = messageUnpackerTuple.first();
             if (StreamReadFeature.AUTO_CLOSE_SOURCE.enabledIn(streamReadFeatures) || cachedSrc != src || src instanceof byte[]) {
                 // reset() replaces the internal MessageBufferInput and clears the unpacker's
                 // internal read buffer to EMPTY_BUFFER. The old ArrayBufferInput becomes
@@ -109,7 +110,7 @@ public class MessagePackParser
             }
             messageUnpacker = messageUnpackerTuple.second();
         }
-        messageUnpackerHolder.set(new Tuple<>(new WeakReference<>(src), messageUnpacker));
+        messageUnpackerHolder.set(new WeakReference<>(new Tuple<>(src, messageUnpacker)));
         ownsThreadLocalUnpacker = true;
     }
 
@@ -702,8 +703,9 @@ public class MessagePackParser
         finally {
             isClosed = true;
             if (ownsThreadLocalUnpacker) {
-                Tuple<WeakReference<Object>, MessageUnpacker> tuple = messageUnpackerHolder.get();
-                if (tuple != null && tuple.first().get() instanceof byte[]) {
+                WeakReference<Tuple<Object, MessageUnpacker>> ref = messageUnpackerHolder.get();
+                Tuple<Object, MessageUnpacker> tuple = ref != null ? ref.get() : null;
+                if (tuple != null && tuple.first() instanceof byte[]) {
                     try {
                         // close() calls ArrayBufferInput.close() which sets buffer = null,
                         // releasing the byte[] payload reference held by the unpacker's input.
@@ -713,7 +715,7 @@ public class MessagePackParser
                     catch (IOException e) {
                         throw _wrapIOFailure(e);
                     }
-                    messageUnpackerHolder.set(new Tuple<>(new WeakReference<>(null), tuple.second()));
+                    messageUnpackerHolder.set(new WeakReference<>(new Tuple<>(null, tuple.second())));
                 }
             }
         }
