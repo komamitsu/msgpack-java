@@ -872,8 +872,12 @@ public class MessagePackGenerator
     public void close() throws JacksonException
     {
         if (!_closed) {
-            flush();
-            super.close();
+            try {
+                flush();
+            }
+            finally {
+                super.close();
+            }
         }
     }
 

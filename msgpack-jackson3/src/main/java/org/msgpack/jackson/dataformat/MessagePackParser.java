@@ -137,6 +137,7 @@ public class MessagePackParser
 
     private JsonToken _nextToken() throws IOException
     {
+        type = null;
         tokenPosition = messageUnpacker.getTotalReadBytes();
 
         boolean isObjectValueSet = streamReadContext.inObject() && _currToken != JsonToken.PROPERTY_NAME;
@@ -298,6 +299,9 @@ public class MessagePackParser
     @Override
     public String getString()
     {
+        if (type == null) {
+            return _currToken == null ? null : _currToken.asString();
+        }
         switch (type) {
             case STRING:
                 return stringValue;
@@ -663,6 +667,12 @@ public class MessagePackParser
             if (ownsThreadLocalUnpacker) {
                 Tuple<Object, MessageUnpacker> tuple = messageUnpackerHolder.get();
                 if (tuple != null && tuple.first() instanceof byte[]) {
+                    try {
+                        tuple.second().close();
+                    }
+                    catch (IOException e) {
+                        throw _wrapIOFailure(e);
+                    }
                     messageUnpackerHolder.set(new Tuple<>(null, tuple.second()));
                 }
             }
