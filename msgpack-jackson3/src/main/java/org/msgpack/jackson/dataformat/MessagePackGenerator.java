@@ -36,7 +36,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.Reader;
-import java.lang.ref.WeakReference;
+
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -50,7 +50,9 @@ public class MessagePackGenerator
     private static final int IN_OBJECT = 1;
     private static final int IN_ARRAY = 2;
     private final MessagePacker messagePacker;
-    private static final ThreadLocal<WeakReference<OutputStreamBufferOutput>> messageBufferOutputHolder = new ThreadLocal<>();
+    // Retained heap per idle thread: ~8 KB (OutputStreamBufferOutput + internal MessageBuffer).
+    // Negligible compared to Jackson's own BufferRecycler (~130 KB/thread for large payloads).
+    private static final ThreadLocal<OutputStreamBufferOutput> messageBufferOutputHolder = new ThreadLocal<>();
     private final OutputStream output;
     private final MessagePack.PackerConfig packerConfig;
     private final boolean supportIntegerKeys;
@@ -243,11 +245,10 @@ public class MessagePackGenerator
     {
         OutputStreamBufferOutput messageBufferOutput;
         if (reuseResourceInGenerator) {
-            WeakReference<OutputStreamBufferOutput> ref = messageBufferOutputHolder.get();
-            messageBufferOutput = ref != null ? ref.get() : null;
+            messageBufferOutput = messageBufferOutputHolder.get();
             if (messageBufferOutput == null) {
                 messageBufferOutput = new OutputStreamBufferOutput(out);
-                messageBufferOutputHolder.set(new WeakReference<>(messageBufferOutput));
+                messageBufferOutputHolder.set(messageBufferOutput);
             }
             else {
                 messageBufferOutput.reset(out);
@@ -1002,14 +1003,9 @@ public class MessagePackGenerator
         // ThreadLocal is always set on the calling thread. A null here would indicate
         // cross-thread misuse; letting it NPE surfaces that bug immediately.
         if (ownsThreadLocalBuffer) {
-            WeakReference<OutputStreamBufferOutput> ref = messageBufferOutputHolder.get();
-            OutputStreamBufferOutput buf = ref != null ? ref.get() : null;
+            OutputStreamBufferOutput buf = messageBufferOutputHolder.get();
             if (buf != null) {
                 try {
-                    // reset(null) clears the OutputStream reference inside OutputStreamBufferOutput
-                    // but intentionally retains its internal MessageBuffer for reuse on the next
-                    // generator created on this thread. The MessageBuffer is reclaimed when the
-                    // WeakReference is collected after this generator instance is GC'd.
                     buf.reset(null);
                 }
                 catch (IOException e) {

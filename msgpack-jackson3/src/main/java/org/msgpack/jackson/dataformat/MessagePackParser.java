@@ -35,14 +35,16 @@ import org.msgpack.core.buffer.MessageBufferInput;
 import org.msgpack.value.ValueType;
 
 import java.io.IOException;
-import java.lang.ref.WeakReference;
+
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
 public class MessagePackParser
         extends ParserMinimalBase
 {
-    private static final ThreadLocal<WeakReference<Tuple<Object, MessageUnpacker>>> messageUnpackerHolder = new ThreadLocal<>();
+    // Retained heap per idle thread: ~0.2 KB (MessageUnpacker with cleared input buffer).
+    // Negligible compared to Jackson's own BufferRecycler (~130 KB/thread for large payloads).
+    private static final ThreadLocal<Tuple<Object, MessageUnpacker>> messageUnpackerHolder = new ThreadLocal<>();
     private final MessageUnpacker messageUnpacker;
 
     private static final BigInteger LONG_MIN = BigInteger.valueOf(Long.MIN_VALUE);
@@ -91,8 +93,7 @@ public class MessagePackParser
             return;
         }
 
-        WeakReference<Tuple<Object, MessageUnpacker>> ref = messageUnpackerHolder.get();
-        Tuple<Object, MessageUnpacker> messageUnpackerTuple = ref != null ? ref.get() : null;
+        Tuple<Object, MessageUnpacker> messageUnpackerTuple = messageUnpackerHolder.get();
         if (messageUnpackerTuple == null) {
             messageUnpacker = MessagePack.newDefaultUnpacker(input);
         }
@@ -110,7 +111,7 @@ public class MessagePackParser
             }
             messageUnpacker = messageUnpackerTuple.second();
         }
-        messageUnpackerHolder.set(new WeakReference<>(new Tuple<>(src, messageUnpacker)));
+        messageUnpackerHolder.set(new Tuple<>(src, messageUnpacker));
         ownsThreadLocalUnpacker = true;
     }
 
@@ -677,14 +678,13 @@ public class MessagePackParser
             messageUnpacker.close();
         }
         if (ownsThreadLocalUnpacker) {
-            WeakReference<Tuple<Object, MessageUnpacker>> ref = messageUnpackerHolder.get();
-            Tuple<Object, MessageUnpacker> tuple = ref != null ? ref.get() : null;
+            Tuple<Object, MessageUnpacker> tuple = messageUnpackerHolder.get();
             if (tuple != null && tuple.first() instanceof byte[]) {
                 // close() calls ArrayBufferInput.close() which sets buffer = null,
                 // releasing the byte[] payload reference held by the unpacker's input.
                 // The unpacker itself is kept alive for reuse on the next parse.
                 tuple.second().close();
-                messageUnpackerHolder.set(new WeakReference<>(new Tuple<>(null, tuple.second())));
+                messageUnpackerHolder.set(new Tuple<>(null, tuple.second()));
             }
         }
     }
