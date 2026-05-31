@@ -301,6 +301,9 @@ public class MessagePackGenerator
             nodeEntryInObject.value = new NodeArray(currentParentElementIndex);
         }
         else {
+            if (isElementsClosed) {
+                flush();
+            }
             nodes.add(new NodeArray(currentParentElementIndex));
         }
         currentParentElementIndex = nodes.size() - 1;
@@ -343,6 +346,9 @@ public class MessagePackGenerator
             nodeEntryInObject.value = new NodeObject(currentParentElementIndex);
         }
         else {
+            if (isElementsClosed) {
+                flush();
+            }
             nodes.add(new NodeObject(currentParentElementIndex));
         }
         currentParentElementIndex = nodes.size() - 1;

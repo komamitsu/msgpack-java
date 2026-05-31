@@ -1284,6 +1284,41 @@ public class MessagePackGeneratorTest
     }
 
     @Test
+    public void testFlushMidWriteOnSecondRootContainerDoesNotCorruptState()
+            throws IOException
+    {
+        // After the first root container closes, isElementsClosed=true.
+        // Opening a second root container does not reset this flag, so a
+        // flush() call while the second container is still open will pack
+        // the incomplete node tree and wipe nodes[], corrupting subsequent writes.
+        MessagePackFactory factory = new MessagePackFactory();
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        JsonGenerator generator = factory.createGenerator(ObjectWriteContext.empty(), baos);
+
+        generator.writeStartArray();
+        generator.writeNumber(1);
+        generator.writeEndArray();
+
+        generator.writeStartArray();        // second root — isElementsClosed still true
+        generator.flush();                  // must NOT pack the incomplete second array
+        generator.writeNumber(2);
+        generator.writeEndArray();
+
+        generator.close();
+
+        ObjectMapper mapper = MessagePackMapper.builder(new MessagePackFactory())
+                .disable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                .build();
+        try (JsonParser parser =
+                new MessagePackFactory().createParser(ObjectReadContext.empty(), baos.toByteArray())) {
+            List<Integer> first = mapper.readValue(parser, new TypeReference<List<Integer>>() {});
+            assertEquals(Collections.singletonList(1), first);
+            List<Integer> second = mapper.readValue(parser, new TypeReference<List<Integer>>() {});
+            assertEquals(Collections.singletonList(2), second);
+        }
+    }
+
+    @Test
     public void testRootScalarAfterClosedRootContainerPreservesOrder()
             throws IOException
     {
