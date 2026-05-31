@@ -153,8 +153,9 @@ List<Object> xs = objectMapper.readValue(bs, typeReference);
 
 ```java
 OutputStream out = new FileOutputStream(tempFile);
-ObjectMapper objectMapper = new MessagePackMapper();
-objectMapper.disable(StreamWriteFeature.AUTO_CLOSE_TARGET);
+ObjectMapper objectMapper = MessagePackMapper.builder()
+        .disable(StreamWriteFeature.AUTO_CLOSE_TARGET)
+        .build();
 
 objectMapper.writeValue(out, 1);
 objectMapper.writeValue(out, "two");
@@ -178,8 +179,9 @@ packer.packString("Hello");
 packer.close();
 
 FileInputStream in = new FileInputStream(tempFile);
-ObjectMapper objectMapper = new MessagePackMapper();
-objectMapper.disable(StreamReadFeature.AUTO_CLOSE_SOURCE);
+ObjectMapper objectMapper = MessagePackMapper.builder()
+        .disable(StreamReadFeature.AUTO_CLOSE_SOURCE)
+        .build();
 System.out.println(objectMapper.readValue(in, Integer.class));
 System.out.println(objectMapper.readValue(in, String.class));
 in.close();
@@ -244,8 +246,9 @@ objectMapper.configOverride(BigDecimal.class).setFormat(JsonFormat.Value.forShap
 `timestamp` extension type is defined in MessagePack as type:-1. Registering `TimestampExtensionModule.INSTANCE` module enables automatic serialization and deserialization of `java.time.Instant` to/from the MessagePack extension type.
 
 ```java
-ObjectMapper objectMapper = new MessagePackMapper()
-                                .registerModule(TimestampExtensionModule.INSTANCE);
+ObjectMapper objectMapper = MessagePackMapper.builder()
+        .addModule(TimestampExtensionModule.INSTANCE)
+        .build();
 Pojo pojo = new Pojo();
 // The type of `timestamp` variable is Instant
 pojo.timestamp = Instant.now();
@@ -364,9 +367,10 @@ extTypeCustomDesers.addCustomDeser(extTypeCode, new ExtensionTypeCustomDeseriali
 
 SimpleModule module = new SimpleModule();
 module.addKeyDeserializer(TripleBytesPojo.class, new TripleBytesPojo.KeyDeserializer());
-ObjectMapper objectMapper = new ObjectMapper(
+ObjectMapper objectMapper = MessagePackMapper.builder(
         new MessagePackFactory().setExtTypeCustomDesers(extTypeCustomDesers))
-            .registerModule(module);
+        .addModule(module)
+        .build();
 
 Map<TripleBytesPojo, Integer> deserializedMap =
         objectMapper.readValue(serializedData,
@@ -427,9 +431,10 @@ extTypeCustomDesers.addCustomDeser(extTypeCode, new ExtensionTypeCustomDeseriali
 
 SimpleModule module = new SimpleModule();
 module.addDeserializer(TripleBytesPojo.class, new TripleBytesPojo.Deserializer());
-ObjectMapper objectMapper = new ObjectMapper(
+ObjectMapper objectMapper = MessagePackMapper.builder(
         new MessagePackFactory().setExtTypeCustomDesers(extTypeCustomDesers))
-            .registerModule(module);
+        .addModule(module)
+        .build();
 
 Map<String, TripleBytesPojo> deserializedMap =
         objectMapper.readValue(serializedData,
