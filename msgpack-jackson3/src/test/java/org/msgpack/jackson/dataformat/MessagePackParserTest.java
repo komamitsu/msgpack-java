@@ -706,6 +706,26 @@ public class MessagePackParserTest
     }
 
     @Test
+    public void testNilKey()
+            throws IOException
+    {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        MessagePacker packer = MessagePack.newDefaultPacker(out).packMapHeader(1);
+        packer.packNil();
+        packer.packInt(42);
+        packer.close();
+
+        JsonParser parser = new MessagePackMapper().createParser(out.toByteArray());
+        assertEquals(JsonToken.START_OBJECT, parser.nextToken());
+        assertEquals(JsonToken.PROPERTY_NAME, parser.nextToken());
+        assertNull(parser.currentName());
+        assertEquals(JsonToken.VALUE_NUMBER_INT, parser.nextToken());
+        assertEquals(42, parser.getIntValue());
+        assertEquals(JsonToken.END_OBJECT, parser.nextToken());
+        parser.close();
+    }
+
+    @Test
     public void extensionTypeCustomDeserializers()
             throws IOException
     {

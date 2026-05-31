@@ -227,7 +227,13 @@ public class MessagePackParser
             case NIL:
                 type = Type.NULL;
                 messageUnpacker.unpackNil();
-                nextToken = JsonToken.VALUE_NULL;
+                if (isObjectValueSet) {
+                    streamReadContext.setCurrentName(null);
+                    nextToken = JsonToken.PROPERTY_NAME;
+                }
+                else {
+                    nextToken = JsonToken.VALUE_NULL;
+                }
                 break;
             case BOOLEAN:
                 boolean b = messageUnpacker.unpackBoolean();
