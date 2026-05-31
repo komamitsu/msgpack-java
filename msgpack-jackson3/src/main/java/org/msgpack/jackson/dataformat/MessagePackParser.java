@@ -43,7 +43,7 @@ public class MessagePackParser
         extends ParserMinimalBase
 {
     // Retained heap per idle thread: ~0.2 KB (MessageUnpacker with cleared input buffer).
-    // Negligible compared to Jackson's own BufferRecycler (~130 KB/thread for large payloads).
+    // Negligible compared to Jackson's own per-thread buffer retention.
     private static final ThreadLocal<Tuple<Object, MessageUnpacker>> messageUnpackerHolder = new ThreadLocal<>();
     private final MessageUnpacker messageUnpacker;
 

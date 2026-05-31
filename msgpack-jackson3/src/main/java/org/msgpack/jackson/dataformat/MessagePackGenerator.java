@@ -51,7 +51,7 @@ public class MessagePackGenerator
     private static final int IN_ARRAY = 2;
     private final MessagePacker messagePacker;
     // Retained heap per idle thread: ~8 KB (OutputStreamBufferOutput + internal MessageBuffer).
-    // Negligible compared to Jackson's own BufferRecycler (~130 KB/thread for large payloads).
+    // Negligible compared to Jackson's own per-thread buffer retention.
     private static final ThreadLocal<OutputStreamBufferOutput> messageBufferOutputHolder = new ThreadLocal<>();
     private final OutputStream output;
     private final MessagePack.PackerConfig packerConfig;
