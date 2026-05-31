@@ -17,11 +17,15 @@ package org.msgpack.jackson.dataformat;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import tools.jackson.core.JsonGenerator;
+import tools.jackson.core.JsonParser;
 import tools.jackson.core.JsonEncoding;
 import tools.jackson.core.JacksonException;
+import tools.jackson.core.ObjectReadContext;
 import tools.jackson.core.ObjectWriteContext;
 import tools.jackson.core.StreamWriteFeature;
 import tools.jackson.core.TokenStreamContext;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.SerializationContext;
 import tools.jackson.databind.ValueSerializer;
@@ -45,6 +49,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -1248,5 +1253,39 @@ public class MessagePackGeneratorTest
         generator.writeString("value");
         generator.writeEndObject();
         generator.close();
+    }
+
+    @Test
+    public void testMultipleRootContainersWithoutFlush()
+            throws IOException
+    {
+        // Writing two consecutive root-level containers on the same generator without
+        // an intervening flush() must not throw IndexOutOfBoundsException.
+        // The second root container sits at node index 1, so the root check
+        // "currentParentElementIndex == 0" incorrectly falls through to the
+        // nested-container path and calls nodes.get(-1).
+        MessagePackFactory factory = new MessagePackFactory();
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        JsonGenerator generator = factory.createGenerator(ObjectWriteContext.empty(), baos);
+        generator.writeStartArray();
+        generator.writeNumber(1);
+        generator.writeEndArray();
+        // second root container — no flush() in between
+        generator.writeStartObject();
+        generator.writeStringProperty("key", "value");
+        generator.writeEndObject();
+        generator.close();
+
+        // Verify both values were written correctly by reading from a shared parser
+        ObjectMapper mapper = MessagePackMapper.builder(new MessagePackFactory())
+                .disable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                .build();
+        try (JsonParser parser =
+                new MessagePackFactory().createParser(ObjectReadContext.empty(), baos.toByteArray())) {
+            List<Integer> list = mapper.readValue(parser, new TypeReference<List<Integer>>() {});
+            assertEquals(Collections.singletonList(1), list);
+            Map<String, String> map = mapper.readValue(parser, new TypeReference<Map<String, String>>() {});
+            assertEquals(Collections.singletonMap("key", "value"), map);
+        }
     }
 }

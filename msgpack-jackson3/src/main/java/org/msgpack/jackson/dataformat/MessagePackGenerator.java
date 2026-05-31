@@ -367,7 +367,7 @@ public class MessagePackGenerator
     {
         writeContext = writeContext.getParent();
         Node parent = nodes.get(currentParentElementIndex);
-        if (currentParentElementIndex == 0) {
+        if (parent.parentIndex == -1) {
             isElementsClosed = true;
             currentParentElementIndex = parent.parentIndex;
             currentState = IN_ROOT;
@@ -375,7 +375,6 @@ public class MessagePackGenerator
         }
 
         currentParentElementIndex = parent.parentIndex;
-        assert currentParentElementIndex >= 0;
         Node currentParent = nodes.get(currentParentElementIndex);
         currentParent.incrementChildCount();
         currentState = currentParent.currentStateAsParent();
