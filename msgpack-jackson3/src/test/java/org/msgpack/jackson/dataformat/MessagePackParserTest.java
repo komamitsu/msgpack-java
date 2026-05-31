@@ -18,6 +18,7 @@ package org.msgpack.jackson.dataformat;
 import tools.jackson.core.JsonParser;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.JsonToken;
+import tools.jackson.core.ObjectReadContext;
 import tools.jackson.core.exc.UnexpectedEndOfInputException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.DeserializationContext;
@@ -1186,7 +1187,7 @@ public class MessagePackParserTest
             packer.packNil();
         }
         MessagePackFactory factory = new MessagePackFactory();
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), out.toByteArray())) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), out.toByteArray())) {
             assertEquals(JsonToken.VALUE_NULL, p.nextToken());
             assertEquals("null", p.getString());
         }
@@ -1201,7 +1202,7 @@ public class MessagePackParserTest
             packer.packBoolean(false);
         }
         MessagePackFactory factory = new MessagePackFactory();
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), out.toByteArray())) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), out.toByteArray())) {
             assertEquals(JsonToken.VALUE_TRUE, p.nextToken());
             assertEquals("true", p.getString());
             assertEquals(JsonToken.VALUE_FALSE, p.nextToken());
@@ -1219,7 +1220,7 @@ public class MessagePackParserTest
         byte[] bytes = out.toByteArray();
         MessagePackFactory factory = new MessagePackFactory();
 
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), bytes)) {
             p.nextToken();
             try {
                 p.getIntValue();
@@ -1227,7 +1228,7 @@ public class MessagePackParserTest
             }
             catch (JacksonException ignored) { }
         }
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), bytes)) {
             p.nextToken();
             try {
                 p.getLongValue();
@@ -1235,7 +1236,7 @@ public class MessagePackParserTest
             }
             catch (JacksonException ignored) { }
         }
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), bytes)) {
             p.nextToken();
             try {
                 p.getDoubleValue();
@@ -1243,7 +1244,7 @@ public class MessagePackParserTest
             }
             catch (JacksonException ignored) { }
         }
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), bytes)) {
             p.nextToken();
             try {
                 p.getFloatValue();
@@ -1251,7 +1252,7 @@ public class MessagePackParserTest
             }
             catch (JacksonException ignored) { }
         }
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), bytes)) {
             p.nextToken();
             try {
                 p.getBigIntegerValue();
@@ -1259,7 +1260,7 @@ public class MessagePackParserTest
             }
             catch (JacksonException ignored) { }
         }
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), bytes)) {
             p.nextToken();
             try {
                 p.getDecimalValue();
@@ -1267,7 +1268,7 @@ public class MessagePackParserTest
             }
             catch (JacksonException ignored) { }
         }
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), bytes)) {
             p.nextToken();
             try {
                 p.getNumberValue();
@@ -1287,7 +1288,7 @@ public class MessagePackParserTest
         byte[] bytes = out.toByteArray();
         MessagePackFactory factory = new MessagePackFactory();
 
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), bytes)) {
             p.nextToken();
             try {
                 p.getIntValue();
@@ -1295,7 +1296,7 @@ public class MessagePackParserTest
             }
             catch (JacksonException ignored) { }
         }
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), bytes)) {
             p.nextToken();
             try {
                 p.getLongValue();
@@ -1303,7 +1304,7 @@ public class MessagePackParserTest
             }
             catch (JacksonException ignored) { }
         }
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), bytes)) {
             p.nextToken();
             try {
                 p.getDoubleValue();
@@ -1323,7 +1324,7 @@ public class MessagePackParserTest
             packer.packString("hello");
         }
         MessagePackFactory factory = new MessagePackFactory();
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), out.toByteArray())) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), out.toByteArray())) {
             assertEquals(JsonToken.VALUE_NULL, p.nextToken());
             assertNull(p.getNumberType());
             assertEquals(JsonToken.VALUE_TRUE, p.nextToken());
@@ -1341,7 +1342,7 @@ public class MessagePackParserTest
             packer.packDouble(1e30);
         }
         MessagePackFactory factory = new MessagePackFactory();
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), out.toByteArray())) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), out.toByteArray())) {
             assertEquals(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
             try {
                 p.getIntValue();
@@ -1359,11 +1360,33 @@ public class MessagePackParserTest
             packer.packDouble(1e30);
         }
         MessagePackFactory factory = new MessagePackFactory();
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), out.toByteArray())) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), out.toByteArray())) {
             assertEquals(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
             try {
                 p.getLongValue();
                 fail("expected exception for out-of-range double");
+            }
+            catch (JacksonException ignored) { }
+        }
+    }
+
+    @Test
+    public void testGetLongValueFromDoubleThatEqualsLongMaxValueRoundedUpThrows() throws IOException
+    {
+        // (double) Long.MAX_VALUE rounds up to 2^63, which exceeds Long.MAX_VALUE.
+        // The check `doubleValue > Long.MAX_VALUE` misses this value and silently
+        // saturates the cast to Long.MAX_VALUE instead of throwing.
+        double twoTo63 = 9.223372036854776E18; // exact double for 2^63
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (MessagePacker packer = MessagePack.newDefaultPacker(out)) {
+            packer.packDouble(twoTo63);
+        }
+        MessagePackFactory factory = new MessagePackFactory();
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), out.toByteArray())) {
+            assertEquals(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
+            try {
+                p.getLongValue();
+                fail("expected exception for double value 2^63 which exceeds Long.MAX_VALUE");
             }
             catch (JacksonException ignored) { }
         }
@@ -1379,7 +1402,7 @@ public class MessagePackParserTest
         byte[] bytes = out.toByteArray();
         MessagePackFactory factory = new MessagePackFactory();
 
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), bytes)) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), bytes)) {
             assertEquals(JsonToken.START_OBJECT, p.nextToken());
             try {
                 p.getIntValue();
@@ -1428,7 +1451,7 @@ public class MessagePackParserTest
             packer.packDouble(3.7);
         }
         MessagePackFactory factory = new MessagePackFactory();
-        try (JsonParser p = factory.createParser(tools.jackson.core.ObjectReadContext.empty(), out.toByteArray())) {
+        try (JsonParser p = factory.createParser(ObjectReadContext.empty(), out.toByteArray())) {
             assertEquals(JsonToken.VALUE_NUMBER_FLOAT, p.nextToken());
             assertEquals(3, p.getIntValue());
         }

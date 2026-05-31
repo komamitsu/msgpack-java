@@ -474,7 +474,8 @@ public class MessagePackParser
                 if (!Double.isFinite(doubleValue)) {
                     return _reportError("Cannot convert non-finite double (" + doubleValue + ") to `long`");
                 }
-                if (doubleValue < Long.MIN_VALUE || doubleValue > Long.MAX_VALUE) {
+                // (double)Long.MAX_VALUE rounds up to 2^63; use >= to reject 2^63 itself.
+                if (doubleValue < Long.MIN_VALUE || doubleValue >= (double) Long.MAX_VALUE) {
                     return _reportError("Numeric value (" + doubleValue + ") out of range for `long`");
                 }
                 return (long) doubleValue;

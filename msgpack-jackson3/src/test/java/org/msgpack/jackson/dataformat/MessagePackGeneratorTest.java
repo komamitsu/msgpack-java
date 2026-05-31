@@ -18,6 +18,7 @@ package org.msgpack.jackson.dataformat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import tools.jackson.core.JsonGenerator;
 import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
 import tools.jackson.core.JsonEncoding;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.ObjectReadContext;
@@ -63,6 +64,7 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -1253,6 +1255,60 @@ public class MessagePackGeneratorTest
         generator.writeString("value");
         generator.writeEndObject();
         generator.close();
+    }
+
+    @Test
+    public void testNullSerializedStringKeyDoesNotThrowNpe()
+            throws IOException
+    {
+        // writeName(MessagePackSerializedString(null)) calls getValue() → null.toString() → NPE.
+        // A null key should be serialized as msgpack nil, not crash.
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        JsonGenerator generator = new MessagePackFactory().createGenerator(ObjectWriteContext.empty(), baos);
+        generator.writeStartObject();
+        generator.writeName(new MessagePackSerializedString(null));
+        generator.writeNumber(42);
+        generator.writeEndObject();
+        generator.close();
+
+        // Verify the null key round-trips as PROPERTY_NAME with null current name
+        try (JsonParser parser =
+                new MessagePackFactory().createParser(ObjectReadContext.empty(), baos.toByteArray())) {
+            assertEquals(JsonToken.START_OBJECT, parser.nextToken());
+            assertEquals(JsonToken.PROPERTY_NAME, parser.nextToken());
+            assertNull(parser.currentName());
+            assertEquals(JsonToken.VALUE_NUMBER_INT, parser.nextToken());
+            assertEquals(42, parser.getIntValue());
+            assertEquals(JsonToken.END_OBJECT, parser.nextToken());
+        }
+    }
+
+    @Test
+    public void testRootScalarAfterClosedRootContainerPreservesOrder()
+            throws IOException
+    {
+        // A root scalar written after a closed root container must be emitted AFTER
+        // the container, not before. Without a fix, addValueNode() packs the scalar
+        // immediately (default branch) while the container stays buffered, reversing order.
+        MessagePackFactory factory = new MessagePackFactory();
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        JsonGenerator generator = factory.createGenerator(ObjectWriteContext.empty(), baos);
+        generator.writeStartArray();
+        generator.writeNumber(1);
+        generator.writeEndArray();
+        generator.writeNumber(2);  // root scalar — must come AFTER the array
+        generator.close();
+
+        ObjectMapper mapper = MessagePackMapper.builder(new MessagePackFactory())
+                .disable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                .build();
+        try (JsonParser parser =
+                new MessagePackFactory().createParser(ObjectReadContext.empty(), baos.toByteArray())) {
+            List<Integer> list = mapper.readValue(parser, new TypeReference<List<Integer>>() {});
+            assertEquals(Collections.singletonList(1), list);
+            int scalar = mapper.readValue(parser, Integer.class);
+            assertEquals(2, scalar);
+        }
     }
 
     @Test

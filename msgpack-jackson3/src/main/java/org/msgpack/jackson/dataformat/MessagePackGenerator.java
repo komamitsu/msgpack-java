@@ -515,6 +515,11 @@ public class MessagePackGenerator
                 break;
             }
             default:
+                // Flush any buffered root container before packing a root scalar,
+                // otherwise the scalar would be emitted before the container.
+                if (isElementsClosed) {
+                    flush();
+                }
                 packNonContainer(value);
                 flushMessagePacker();
                 break;
