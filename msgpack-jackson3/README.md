@@ -231,7 +231,7 @@ byte[] converted = objectMapper.writeValueAsBytes(obj);
 System.out.println(objectMapper.readValue(converted, Pojo.class));   // => Pojo{value=1234567890.98765432100}
 ```
 
-`MessagePackMapper#handleBigIntegerAndBigDecimalAsString()` is equivalent to the following configuration.
+`MessagePackMapper.Builder#handleBigIntegerAndBigDecimalAsString()` is equivalent to the following configuration.
 
 ```java
 ObjectMapper objectMapper = new ObjectMapper(new MessagePackFactory());

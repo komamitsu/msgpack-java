@@ -174,10 +174,10 @@ both bugs compound).
 retains the entire last parsed payload for each thread in a pool indefinitely, which
 can cause unbounded memory retention after large messages.
 
-Fixed in msgpack-jackson3: sources are now wrapped in `WeakReference` so GC can reclaim
-them once the caller drops its reference. On `close()`, byte-array sources are replaced
-with `WeakReference(null)` for prompt release; InputStream sources are left alive in the
-WeakReference as long as the caller holds them, preserving same-stream reuse detection.
+Fixed in msgpack-jackson3: on `close()`, byte-array sources are released by calling
+`unpacker.close()` (nulls out `ArrayBufferInput`'s internal buffer) and replacing the
+Tuple with `(null, unpacker)`. The ThreadLocal uses strong references; benchmarking showed
+retention is ~0.2 KB/thread, which is negligible.
 Needs the same fix in msgpack-jackson.
 
 ## 3. `MessagePackGenerator`: `close()` does not set `isClosed()` to true
