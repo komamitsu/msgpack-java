@@ -60,6 +60,7 @@ public class MessagePackGenerator
     private final List<Node> nodes;
     private boolean isElementsClosed = false;
     private MessagePackWriteContext writeContext;
+    private final boolean ownsThreadLocalBuffer;
 
     private static final class RawUtf8String
     {
@@ -210,6 +211,7 @@ public class MessagePackGenerator
         this.writeContext = MessagePackWriteContext.createRootContext(
                 StreamWriteFeature.STRICT_DUPLICATE_DETECTION.enabledIn(streamWriteFeatures)
                         ? DupDetector.rootDetector(this) : null);
+        this.ownsThreadLocalBuffer = false;
     }
 
     public MessagePackGenerator(
@@ -231,6 +233,7 @@ public class MessagePackGenerator
         this.writeContext = MessagePackWriteContext.createRootContext(
                 StreamWriteFeature.STRICT_DUPLICATE_DETECTION.enabledIn(streamWriteFeatures)
                         ? DupDetector.rootDetector(this) : null);
+        this.ownsThreadLocalBuffer = reuseResourceInGenerator;
     }
 
     private MessageBufferOutput getMessageBufferOutputForOutputStream(
@@ -995,6 +998,25 @@ public class MessagePackGenerator
     @Override
     protected void _releaseBuffers()
     {
+        // No null check on get(): generators are single-threaded by contract so this
+        // ThreadLocal is always set on the calling thread. A null here would indicate
+        // cross-thread misuse; letting it NPE surfaces that bug immediately.
+        if (ownsThreadLocalBuffer) {
+            WeakReference<OutputStreamBufferOutput> ref = messageBufferOutputHolder.get();
+            OutputStreamBufferOutput buf = ref != null ? ref.get() : null;
+            if (buf != null) {
+                try {
+                    // reset(null) clears the OutputStream reference inside OutputStreamBufferOutput
+                    // but intentionally retains its internal MessageBuffer for reuse on the next
+                    // generator created on this thread. The MessageBuffer is reclaimed when the
+                    // WeakReference is collected after this generator instance is GC'd.
+                    buf.reset(null);
+                }
+                catch (IOException e) {
+                    throw _wrapIOFailure(e);
+                }
+            }
+        }
     }
 
     @Override
