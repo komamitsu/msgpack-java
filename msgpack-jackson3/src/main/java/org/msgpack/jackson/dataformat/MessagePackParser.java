@@ -685,12 +685,22 @@ public class MessagePackParser
         }
         if (ownsThreadLocalUnpacker) {
             Tuple<Object, MessageUnpacker> tuple = messageUnpackerHolder.get();
-            if (tuple != null && tuple.first() instanceof byte[]) {
-                // close() calls ArrayBufferInput.close() which sets buffer = null,
-                // releasing the byte[] payload reference held by the unpacker's input.
-                // The unpacker itself is kept alive for reuse on the next parse.
-                tuple.second().close();
-                messageUnpackerHolder.set(new Tuple<>(null, tuple.second()));
+            if (tuple != null) {
+                if (tuple.first() instanceof byte[]) {
+                    // close() calls ArrayBufferInput.close() which sets buffer = null,
+                    // releasing the byte[] payload reference held by the unpacker's input.
+                    // The unpacker itself is kept alive for reuse on the next parse.
+                    tuple.second().close();
+                    messageUnpackerHolder.set(new Tuple<>(null, tuple.second()));
+                }
+                else if (StreamReadFeature.AUTO_CLOSE_SOURCE.enabledIn(_streamReadFeatures)) {
+                    // Stream is already closed above; release the reference so it doesn't
+                    // linger on the thread until the next parse.
+                    messageUnpackerHolder.set(new Tuple<>(null, tuple.second()));
+                }
+                // else: InputStream with AUTO_CLOSE_SOURCE disabled — keep the reference
+                // so the next parse on the same thread can detect same-stream reuse and
+                // avoid resetting the unpacker (which would discard its read-ahead buffer).
             }
         }
     }

@@ -1153,6 +1153,32 @@ public class MessagePackParserTest
     }
 
     @Test
+    public void testInputStreamSequentialReadsWithAutoCloseSourceDisabled()
+            throws IOException
+    {
+        ObjectMapper objectMapper = MessagePackMapper.builder(new MessagePackFactory())
+                .disable(tools.jackson.core.StreamReadFeature.AUTO_CLOSE_SOURCE)
+                .disable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                .build();
+
+        // Two values packed sequentially into a single stream
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(objectMapper.writeValueAsBytes(Arrays.asList(1, 2, 3)));
+        out.write(objectMapper.writeValueAsBytes(Arrays.asList(4, 5, 6)));
+        ByteArrayInputStream stream = new ByteArrayInputStream(out.toByteArray());
+
+        // First parse reads the first value; unpacker may read ahead into the second value
+        List<Integer> first = objectMapper.readValue(stream, new TypeReference<List<Integer>>() {});
+        assertEquals(Arrays.asList(1, 2, 3), first);
+
+        // Second parse must read the second value from the same stream.
+        // If the source was incorrectly cleared from the ThreadLocal on close(),
+        // the unpacker's read-ahead buffer is dismissed and the second value is lost.
+        List<Integer> second = objectMapper.readValue(stream, new TypeReference<List<Integer>>() {});
+        assertEquals(Arrays.asList(4, 5, 6), second);
+    }
+
+    @Test
     public void testGetStringOnNullToken() throws IOException
     {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
